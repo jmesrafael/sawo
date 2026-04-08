@@ -1,12 +1,15 @@
 // src/pages/ProductPage.jsx
-// Uses Supabase directly - no Express server dependency.
-// Removed localStorage cache (caused disappearing content bug).
+// Restructured layout:
+// Section 1 (2-col): Left = Carousel + Cat/Tags | Right = Brand, Name, Short Desc, Features (vertically centered)
+// Section 2 (1-col): Full Description
+// Section 3 (2-col): Left = Diagrams | Right = PDF Resources
+// Section 4: Related Products
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { supabase } from "../Administrator/supabase"; // adjust path if needed
+import { supabase } from "../Administrator/supabase";
 
-/* - Lightbox ---------------------------- */
+/* ── Lightbox ─────────────────────────────────────────────────────── */
 function Lightbox({ images, startIndex, onClose }) {
   const [idx, setIdx] = useState(startIndex);
   const [scale, setScale] = useState(1);
@@ -85,7 +88,7 @@ function Lightbox({ images, startIndex, onClose }) {
         fontFamily: "'Montserrat',sans-serif", fontSize: "0.65rem",
         pointerEvents: "none",
       }}>
-        Scroll to zoom / Drag to pan / Esc to close
+        Scroll to zoom · Drag to pan · Esc to close
       </div>
 
       {images.length > 1 && (
@@ -156,7 +159,7 @@ function Lightbox({ images, startIndex, onClose }) {
   );
 }
 
-/* - Image Carousel ------------------------- */
+/* ── Image Carousel ───────────────────────────────────────────────── */
 function Carousel({ images, thumbnail, onImageClick }) {
   const all = [
     ...(thumbnail ? [thumbnail] : []),
@@ -266,7 +269,7 @@ function Carousel({ images, thumbnail, onImageClick }) {
   );
 }
 
-/* - Diagram Carousel ------------------------ */
+/* ── Diagram Carousel ─────────────────────────────────────────────── */
 function DiagramCarousel({ images, onImageClick }) {
   const [idx, setIdx] = useState(0);
   const single = images.length === 1;
@@ -278,12 +281,12 @@ function DiagramCarousel({ images, onImageClick }) {
         position: "relative", borderRadius: 10, overflow: "hidden",
         background: "#faf7f4", border: "1px solid #edddd0",
         display: "flex", alignItems: "center", justifyContent: "center",
-        minHeight: 200, cursor: "zoom-in",
+        minHeight: 220, cursor: "zoom-in",
       }} onClick={() => onImageClick(images, idx)}>
         <img
           key={idx} src={images[idx]} alt=""
           onError={e => { e.currentTarget.style.display = "none"; }}
-          style={{ maxWidth: "100%", maxHeight: 300, objectFit: "contain", padding: 16, animation: "ppFadeIn 0.2s ease", display: "block" }}
+          style={{ maxWidth: "100%", maxHeight: 320, objectFit: "contain", padding: 16, animation: "ppFadeIn 0.2s ease", display: "block" }}
         />
         <div style={{
           position: "absolute", bottom: 8, right: 8,
@@ -345,80 +348,76 @@ function DiagramCarousel({ images, onImageClick }) {
   );
 }
 
-/* - Resources dropdown ----------------------- */
-function ResourcesDropdown({ files }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef();
-
-  useEffect(() => {
-    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  if (!files?.length) return null;
+/* ── PDF Resources Panel ──────────────────────────────────────────── */
+function ResourcesPanel({ files }) {
+  if (!files?.length) return (
+    <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      height: "100%", minHeight: 180, color: "#c4a882",
+      fontFamily: "'Montserrat',sans-serif", fontSize: "0.82rem", textAlign: "center", gap: 10,
+    }}>
+      <i className="fa-regular fa-folder-open" style={{ fontSize: "2rem", color: "#ddc9b4" }} />
+      No resources available
+    </div>
+  );
 
   return (
-    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
-      <button onClick={() => setOpen(o => !o)} style={{
-        display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 22px",
-        background: "linear-gradient(135deg,#8b5e3c,#a67853)", color: "#fff",
-        border: "none", borderRadius: 8, fontFamily: "'Montserrat',sans-serif",
-        fontWeight: 700, fontSize: "0.8rem", cursor: "pointer",
-        boxShadow: "0 4px 16px rgba(139,94,60,0.28)", letterSpacing: "0.04em", transition: "all 0.2s",
-      }}
-        onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(139,94,60,0.4)"; }}
-        onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 16px rgba(139,94,60,0.28)"; }}
-      >
-        <i className="fa-solid fa-file-arrow-down" />
-        Resources
-        <i className={`fa-solid fa-chevron-${open ? "up" : "down"}`} style={{ fontSize: "0.65rem" }} />
-      </button>
-
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 8px)", left: 0,
-          minWidth: 240, background: "#fff", borderRadius: 10,
-          boxShadow: "0 16px 50px rgba(139,94,60,0.18)",
-          border: "1px solid #edddd0", overflow: "hidden",
-          animation: "ppFadeIn 0.15s ease", zIndex: 100,
-        }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {files.map((f, i) => (
+        <a key={i} href={f.url} target="_blank" rel="noopener noreferrer"
+          style={{
+            display: "flex", alignItems: "center", gap: 14, padding: "14px 16px",
+            background: "#faf7f4", borderRadius: 10, border: "1px solid #edddd0",
+            color: "#2c1a0e", textDecoration: "none",
+            fontFamily: "'Montserrat',sans-serif", fontSize: "0.82rem",
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = "#f5ede3"; e.currentTarget.style.borderColor = "#d4b896"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "#faf7f4"; e.currentTarget.style.borderColor = "#edddd0"; }}
+        >
           <div style={{
-            padding: "7px 12px 5px", fontSize: "0.6rem", fontWeight: 700,
-            letterSpacing: "0.1em", textTransform: "uppercase", color: "#a67853",
-            fontFamily: "'Montserrat',sans-serif", borderBottom: "1px solid #edddd0",
+            width: 40, height: 40, borderRadius: 9,
+            background: "linear-gradient(135deg,#8b5e3c,#a67853)",
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
           }}>
-            Available Downloads
+            <i className="fa-solid fa-file-pdf" style={{ color: "#fff", fontSize: "1rem" }} />
           </div>
-          {files.map((f, i) => (
-            <a key={i} href={f.url} target="_blank" rel="noopener noreferrer"
-              style={{
-                display: "flex", alignItems: "center", gap: 9, padding: "10px 12px",
-                color: "#2c1a0e", textDecoration: "none",
-                fontFamily: "'Montserrat',sans-serif", fontSize: "0.8rem",
-                borderBottom: i < files.length - 1 ? "1px solid #f5ede3" : "none",
-                transition: "background 0.14s",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = "#fdf8f4"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
-            >
-              <div style={{ width: 28, height: 28, borderRadius: 7, background: "linear-gradient(135deg,#8b5e3c,#a67853)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <i className="fa-solid fa-file-pdf" style={{ color: "#fff", fontSize: "0.75rem" }} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: "0.8rem", color: "#2c1a0e", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
-                <div style={{ fontSize: "0.63rem", color: "#a67853" }}>PDF / Click to open</div>
-              </div>
-              <i className="fa-solid fa-arrow-up-right-from-square" style={{ color: "#a67853", fontSize: "0.65rem", flexShrink: 0 }} />
-            </a>
-          ))}
-        </div>
-      )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "#2c1a0e", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
+            <div style={{ fontSize: "0.65rem", color: "#a67853", marginTop: 2 }}>PDF · Click to open</div>
+          </div>
+          <i className="fa-solid fa-arrow-up-right-from-square" style={{ color: "#a67853", fontSize: "0.7rem", flexShrink: 0 }} />
+        </a>
+      ))}
     </div>
   );
 }
 
-/* - Related Products ------------------------ */
+/* ── Section Label ────────────────────────────────────────────────── */
+function SectionLabel({ icon, text }) {
+  return (
+    <h3 style={{
+      fontFamily: "'Montserrat',sans-serif", fontWeight: 700,
+      fontSize: "0.67rem", letterSpacing: "0.12em", textTransform: "uppercase",
+      color: "#8b5e3c", margin: "0 0 12px",
+      display: "flex", alignItems: "center", gap: 6,
+    }}>
+      {icon && <i className={icon} style={{ opacity: 0.75 }} />}
+      {text}
+    </h3>
+  );
+}
+
+/* ── Divider ──────────────────────────────────────────────────────── */
+function Divider() {
+  return (
+    <div style={{ maxWidth: 1140, margin: "0 auto", padding: "0 32px" }}>
+      <div style={{ height: 1, background: "linear-gradient(to right,transparent,#edddd0,transparent)" }} />
+    </div>
+  );
+}
+
+/* ── Related Products ─────────────────────────────────────────────── */
 function RelatedProducts({ currentSlug, categories }) {
   const [related, setRelated] = useState([]);
 
@@ -427,14 +426,13 @@ function RelatedProducts({ currentSlug, categories }) {
     let cancelled = false;
     (async () => {
       try {
-        // Use Supabase directly - overlaps any category
         const { data } = await supabase
           .from("products")
-          .select("id,name,slug,thumbnail,categories")
+          .select("id,name,slug,thumbnail,categories,short_description")
           .eq("status", "published")
           .eq("visible", true)
           .neq("slug", currentSlug)
-          .contains("categories", categories.slice(0, 1)) // at least one matching category
+          .contains("categories", categories.slice(0, 1))
           .limit(4);
         if (!cancelled && data) setRelated(data);
       } catch {}
@@ -445,43 +443,118 @@ function RelatedProducts({ currentSlug, categories }) {
   if (!related.length) return null;
 
   return (
-    <section style={{ maxWidth: 1140, margin: "0 auto", padding: "48px 32px 72px" }}>
-      <div style={{ textAlign: "center", marginBottom: 32 }}>
-        <h2 style={{ fontFamily: "'Montserrat',sans-serif", fontWeight: 700, fontSize: "1.6rem", color: "#8b5e3c", margin: 0 }}>Related Products</h2>
-        <p style={{ fontFamily: "'Montserrat',sans-serif", fontSize: "0.85rem", color: "#a67853", fontStyle: "italic", marginTop: 6 }}>You might also be interested in these</p>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 20 }}>
-        {related.map(p => (
-          <Link key={p.id || p.slug} to={`/products/${p.slug}`}
-            style={{ textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: "18px 12px 14px", transition: "all 0.25s ease" }}
-            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px)"; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; }}
-          >
-            <div style={{ width: "100%", aspectRatio: "1/1", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
-              {p.thumbnail
-                ? <img src={p.thumbnail} alt={p.name} onError={e => { e.currentTarget.style.display = "none"; }} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
-                : <i className="fa-regular fa-image" style={{ color: "#d5b99a", fontSize: "2rem" }} />
-              }
-            </div>
-            <p style={{ fontFamily: "'Montserrat',sans-serif", fontWeight: 700, fontSize: "0.8rem", color: "#2c1a0e", margin: "0 0 5px", lineHeight: 1.3 }}>{p.name}</p>
-            {p.categories?.[0] && (
-              <span style={{ fontFamily: "'Montserrat',sans-serif", fontSize: "0.65rem", fontWeight: 700, color: "#8b5e3c", letterSpacing: "0.06em", textTransform: "uppercase" }}>{p.categories[0]}</span>
-            )}
-          </Link>
-        ))}
-      </div>
-    </section>
+    <>
+      <Divider />
+      <section style={{ maxWidth: 1140, margin: "0 auto", padding: "52px 32px 80px" }}>
+        <div style={{ marginBottom: 36 }}>
+          <p style={{
+            fontFamily: "'Montserrat',sans-serif", fontWeight: 700,
+            fontSize: "0.67rem", letterSpacing: "0.14em", textTransform: "uppercase",
+            color: "#a67853", margin: "0 0 6px",
+          }}>
+            You might also like
+          </p>
+          <h2 style={{
+            fontFamily: "'Montserrat',sans-serif", fontWeight: 700,
+            fontSize: "1.5rem", color: "#2c1a0e", margin: 0, lineHeight: 1.2,
+          }}>
+            Related Products
+          </h2>
+        </div>
+
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))",
+          gap: 20,
+        }}>
+          {related.map(p => (
+            <Link
+              key={p.id || p.slug}
+              to={`/products/${p.slug}`}
+              style={{ textDecoration: "none" }}
+            >
+              <div
+                style={{
+                  background: "#fff", borderRadius: 12, border: "1px solid #edddd0",
+                  overflow: "hidden", transition: "all 0.25s ease",
+                  display: "flex", flexDirection: "column",
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = "translateY(-4px)";
+                  e.currentTarget.style.borderColor = "#c4a882";
+                  e.currentTarget.style.boxShadow = "0 8px 28px rgba(139,94,60,0.12)";
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.borderColor = "#edddd0";
+                  e.currentTarget.style.boxShadow = "none";
+                }}
+              >
+                <div style={{
+                  aspectRatio: "1/1", background: "#faf7f4",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: 16, borderBottom: "1px solid #edddd0",
+                }}>
+                  {p.thumbnail
+                    ? <img src={p.thumbnail} alt={p.name}
+                        onError={e => { e.currentTarget.style.display = "none"; }}
+                        style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                    : <i className="fa-regular fa-image" style={{ color: "#d5b99a", fontSize: "2rem" }} />
+                  }
+                </div>
+                <div style={{ padding: "14px 16px 16px", flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                  {p.categories?.[0] && (
+                    <span style={{
+                      fontFamily: "'Montserrat',sans-serif", fontSize: "0.62rem",
+                      fontWeight: 700, color: "#a67853", letterSpacing: "0.07em",
+                      textTransform: "uppercase",
+                    }}>
+                      {p.categories[0]}
+                    </span>
+                  )}
+                  <p style={{
+                    fontFamily: "'Montserrat',sans-serif", fontWeight: 700,
+                    fontSize: "0.82rem", color: "#2c1a0e", margin: 0, lineHeight: 1.4,
+                  }}>
+                    {p.name}
+                  </p>
+                  {p.short_description && (
+                    <p style={{
+                      fontFamily: "'Montserrat',sans-serif", fontSize: "0.73rem",
+                      color: "#7a5c45", margin: 0, lineHeight: 1.5,
+                      display: "-webkit-box", WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical", overflow: "hidden",
+                    }}>
+                      {p.short_description}
+                    </p>
+                  )}
+                  <div style={{ marginTop: "auto", paddingTop: 10 }}>
+                    <span style={{
+                      fontFamily: "'Montserrat',sans-serif", fontSize: "0.72rem",
+                      fontWeight: 700, color: "#8b5e3c",
+                      display: "inline-flex", alignItems: "center", gap: 4,
+                    }}>
+                      View product <i className="fa-solid fa-arrow-right" style={{ fontSize: "0.6rem" }} />
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
-/* - Skeleton ---------------------------- */
+/* ── Skeleton ─────────────────────────────────────────────────────── */
 function SkeletonPage() {
   return (
     <div style={{ maxWidth: 1140, margin: "0 auto", padding: "40px 32px 60px" }}>
       <style>{`@keyframes skS{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
-      <div className="pp-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48 }}>
         <div style={{ aspectRatio: "1/1", borderRadius: 14, background: "linear-gradient(90deg,#f5ede3 25%,#fdf8f4 50%,#f5ede3 75%)", backgroundSize: "200% 100%", animation: "skS 1.4s infinite" }} />
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, justifyContent: "center" }}>
           {[35, 55, 80, 70, 60, 90, 55].map((w, i) => (
             <div key={i} style={{ height: i === 0 ? 26 : 12, width: `${w}%`, borderRadius: 6, background: "linear-gradient(90deg,#f5ede3 25%,#fdf8f4 50%,#f5ede3 75%)", backgroundSize: "200% 100%", animation: "skS 1.4s infinite" }} />
           ))}
@@ -491,14 +564,14 @@ function SkeletonPage() {
   );
 }
 
-/* - Main ------------------------------ */
+/* ── Main ─────────────────────────────────────────────────────────── */
 export default function ProductPage() {
   const { slug } = useParams();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
-
   const [lightbox, setLightbox] = useState(null);
+
   const openLightbox = (images, index) => setLightbox({ images, index });
   const closeLightbox = () => setLightbox(null);
 
@@ -510,7 +583,6 @@ export default function ProductPage() {
 
     (async () => {
       try {
-        // Fetch directly from Supabase - no Express needed
         const { data, error: err } = await supabase
           .from("products")
           .select("*")
@@ -524,7 +596,7 @@ export default function ProductPage() {
         } else {
           if (!cancelled) setProduct(data);
         }
-      } catch (e) {
+      } catch {
         if (!cancelled) setError("Connection error. Please try again.");
       } finally {
         if (!cancelled) setLoading(false);
@@ -541,15 +613,29 @@ export default function ProductPage() {
   );
 
   if (error || !product) return (
-    <div style={{ minHeight: "70vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#fff", fontFamily: "'Montserrat',sans-serif", textAlign: "center", padding: "100px 24px 60px" }}>
-      <div style={{ width: 72, height: 72, background: "linear-gradient(135deg,#8b5e3c,#a67853)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", boxShadow: "0 8px 28px rgba(139,94,60,0.28)" }}>
+    <div style={{
+      minHeight: "70vh", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", background: "#fff",
+      fontFamily: "'Montserrat',sans-serif", textAlign: "center", padding: "100px 24px 60px",
+    }}>
+      <div style={{
+        width: 72, height: 72, background: "linear-gradient(135deg,#8b5e3c,#a67853)",
+        borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+        margin: "0 auto 20px", boxShadow: "0 8px 28px rgba(139,94,60,0.28)",
+      }}>
         <i className="fa-solid fa-magnifying-glass" style={{ color: "#fff", fontSize: "1.6rem" }} />
       </div>
       <h2 style={{ color: "#2c1a0e", margin: "0 0 8px" }}>Product Not Found</h2>
-      <p style={{ color: "#a67853", margin: "0 0 24px", fontStyle: "italic", fontSize: "0.88rem" }}>{error || "This product doesn't exist or isn't published yet."}</p>
+      <p style={{ color: "#a67853", margin: "0 0 24px", fontStyle: "italic", fontSize: "0.88rem" }}>
+        {error || "This product doesn't exist or isn't published yet."}
+      </p>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
-        <Link to="/products" style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 20px", background: "linear-gradient(135deg,#8b5e3c,#a67853)", color: "#fff", textDecoration: "none", fontWeight: 700, borderRadius: 7, fontSize: "0.82rem" }}>å Browse Products</Link>
-        <Link to="/" style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 20px", border: "1.5px solid #a67853", color: "#a67853", textDecoration: "none", fontWeight: 700, borderRadius: 7, fontSize: "0.82rem" }}>Home</Link>
+        <Link to="/products" style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 20px", background: "linear-gradient(135deg,#8b5e3c,#a67853)", color: "#fff", textDecoration: "none", fontWeight: 700, borderRadius: 7, fontSize: "0.82rem" }}>
+          Browse Products
+        </Link>
+        <Link to="/" style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 20px", border: "1.5px solid #a67853", color: "#a67853", textDecoration: "none", fontWeight: 700, borderRadius: 7, fontSize: "0.82rem" }}>
+          Home
+        </Link>
       </div>
     </div>
   );
@@ -562,17 +648,21 @@ export default function ProductPage() {
   const hasSpecTable = product.spec_table?.headers?.length > 0;
   const hasCats      = (product.categories || []).length > 0;
   const hasTags      = (product.tags || []).length > 0;
+  const hasResources = files.length > 0;
+  const hasSection3  = hasSpec || hasSpecTable || hasResources;
 
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap');
         @keyframes ppFadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+
         @media(max-width:900px){
-          .pp-grid { grid-template-columns: 1fr !important; gap: 28px !important; }
+          .pp-s1-grid { grid-template-columns: 1fr !important; gap: 28px !important; }
+          .pp-s3-grid { grid-template-columns: 1fr !important; gap: 28px !important; }
         }
         @media(max-width:600px){
-          .pp-outer { padding: 20px 16px 0 !important; }
+          .pp-outer { padding-left: 16px !important; padding-right: 16px !important; }
         }
       `}</style>
 
@@ -582,11 +672,17 @@ export default function ProductPage() {
 
       <div style={{ minHeight: "100vh", background: "#fff", fontFamily: "'Montserrat',sans-serif" }}>
 
-        <div className="pp-outer" style={{ maxWidth: 1140, margin: "0 auto", padding: "40px 32px 0", paddingTop: 160 }}>
-          <div className="pp-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 52, alignItems: "start" }}>
-
-            {/* LEFT col */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {/* ── SECTION 1: Images + Info ─────────────────────────────── */}
+        <div
+          className="pp-outer"
+          style={{ maxWidth: 1140, margin: "0 auto", padding: "40px 32px 52px", paddingTop: 160 }}
+        >
+          <div
+            className="pp-s1-grid"
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 56, alignItems: "center" }}
+          >
+            {/* LEFT: Carousel + Tags */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <Carousel
                 images={product.images}
                 thumbnail={product.thumbnail}
@@ -597,62 +693,68 @@ export default function ProductPage() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 7, alignItems: "center" }}>
                   {hasCats && product.categories.map((c, i) => (
                     <Link key={i} to={`/products?category=${encodeURIComponent(c)}`}
-                      style={{ background: "linear-gradient(135deg,#8b5e3c,#a67853)", color: "#fff", padding: "3px 12px", borderRadius: 20, fontSize: "0.67rem", fontWeight: 700, fontFamily: "'Montserrat',sans-serif", textDecoration: "none", letterSpacing: "0.04em" }}>
+                      style={{
+                        background: "linear-gradient(135deg,#8b5e3c,#a67853)", color: "#fff",
+                        padding: "4px 13px", borderRadius: 20, fontSize: "0.67rem",
+                        fontWeight: 700, fontFamily: "'Montserrat',sans-serif",
+                        textDecoration: "none", letterSpacing: "0.04em",
+                      }}>
                       {c}
                     </Link>
                   ))}
                   {hasTags && product.tags.map((t, i) => (
-                    <span key={i} style={{ background: "#faf7f4", color: "#8b5e3c", padding: "3px 11px", borderRadius: 20, fontSize: "0.65rem", fontWeight: 600, fontFamily: "'Montserrat',sans-serif", border: "1px solid #e0cfc0" }}>
+                    <span key={i} style={{
+                      background: "#faf7f4", color: "#8b5e3c", padding: "4px 12px", borderRadius: 20,
+                      fontSize: "0.65rem", fontWeight: 600, fontFamily: "'Montserrat',sans-serif",
+                      border: "1px solid #e0cfc0",
+                    }}>
                       {t}
                     </span>
                   ))}
                 </div>
               )}
-
-              {hasSpec && (
-                <div>
-                  <h3 style={{ fontFamily: "'Montserrat',sans-serif", fontWeight: 700, fontSize: "0.67rem", letterSpacing: "0.12em", textTransform: "uppercase", color: "#8b5e3c", margin: "0 0 8px" }}>
-                    <i className="fa-solid fa-diagram-project" style={{ marginRight: 6, opacity: 0.7 }} />Diagrams
-                  </h3>
-                  <DiagramCarousel images={product.spec_images} onImageClick={openLightbox} />
-                </div>
-              )}
             </div>
 
-            {/* RIGHT col */}
-            <div style={{ display: "flex", flexDirection: "column" }}>
+            {/* RIGHT: Brand, Name, Short Desc, Features — vertically centered */}
+            <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
               {(product.brand || product.type) && (
-                <p style={{ fontFamily: "'Montserrat',sans-serif", fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#a67853", margin: "0 0 7px" }}>
-                  {[product.brand, product.type].filter(Boolean).join(" / ")}
+                <p style={{
+                  fontFamily: "'Montserrat',sans-serif", fontSize: "0.68rem", fontWeight: 700,
+                  letterSpacing: "0.14em", textTransform: "uppercase", color: "#a67853", margin: "0 0 8px",
+                }}>
+                  {[product.brand, product.type].filter(Boolean).join(" · ")}
                 </p>
               )}
 
-              <h1 style={{ fontFamily: "'Montserrat',sans-serif", fontWeight: 700, fontSize: "clamp(1.35rem,2.5vw,1.9rem)", color: "#2c1a0e", margin: "0 0 18px", lineHeight: 1.2 }}>
+              <h1 style={{
+                fontFamily: "'Montserrat',sans-serif", fontWeight: 700,
+                fontSize: "clamp(1.35rem,2.5vw,1.9rem)", color: "#2c1a0e",
+                margin: "0 0 20px", lineHeight: 1.2,
+              }}>
                 {product.name}
               </h1>
 
               {hasShortDesc && (
-                <div style={{ marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid #edddd0" }}>
-                  <p style={{ fontFamily: "'Montserrat',sans-serif", fontSize: "0.92rem", color: "#7a5c45", lineHeight: 1.8, margin: 0, fontStyle: "italic" }}>
+                <div style={{ marginBottom: 22, paddingBottom: 22, borderBottom: "1px solid #edddd0" }}>
+                  <p style={{
+                    fontFamily: "'Montserrat',sans-serif", fontSize: "0.92rem",
+                    color: "#7a5c45", lineHeight: 1.8, margin: 0, fontStyle: "italic",
+                  }}>
                     {product.short_description}
                   </p>
                 </div>
               )}
 
-              {hasDesc && (
-                <div style={{ marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid #edddd0" }}>
-                  <h3 style={{ fontFamily: "'Montserrat',sans-serif", fontWeight: 700, fontSize: "0.67rem", letterSpacing: "0.12em", textTransform: "uppercase", color: "#8b5e3c", margin: "0 0 8px" }}>Description</h3>
-                  <div style={{ fontFamily: "'Montserrat',sans-serif", color: "#5a4030", lineHeight: 1.8, fontSize: "0.86rem" }}
-                    dangerouslySetInnerHTML={{ __html: product.description }} />
-                </div>
-              )}
-
               {hasFeatures && (
-                <div style={{ marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid #edddd0" }}>
-                  <h3 style={{ fontFamily: "'Montserrat',sans-serif", fontWeight: 700, fontSize: "0.67rem", letterSpacing: "0.12em", textTransform: "uppercase", color: "#8b5e3c", margin: "0 0 8px" }}>Features</h3>
-                  <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 5 }}>
+                <div>
+                  <SectionLabel icon="fa-solid fa-list-check" text="Features" />
+                  <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 7 }}>
                     {product.features.map((f, i) => (
-                      <li key={i} style={{ fontFamily: "'Montserrat',sans-serif", color: "#5a4030", fontSize: "0.84rem", lineHeight: 1.5, display: "flex", alignItems: "flex-start", gap: 8 }}>
+                      <li key={i} style={{
+                        fontFamily: "'Montserrat',sans-serif", color: "#5a4030",
+                        fontSize: "0.84rem", lineHeight: 1.5,
+                        display: "flex", alignItems: "flex-start", gap: 9,
+                      }}>
                         <i className="fa-solid fa-check" style={{ color: "#a67853", fontSize: "0.68rem", marginTop: 4, flexShrink: 0 }} />
                         {f}
                       </li>
@@ -661,39 +763,7 @@ export default function ProductPage() {
                 </div>
               )}
 
-              {hasSpecTable && (
-                <div style={{ marginBottom: 18, paddingBottom: 18, borderBottom: "1px solid #edddd0" }}>
-                  <h3 style={{ fontFamily: "'Montserrat',sans-serif", fontWeight: 700, fontSize: "0.67rem", letterSpacing: "0.12em", textTransform: "uppercase", color: "#8b5e3c", margin: "0 0 10px" }}>Technical Data</h3>
-                  <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid #edddd0" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Montserrat',sans-serif", fontSize: "0.78rem" }}>
-                      <thead>
-                        <tr style={{ background: "#faf7f4" }}>
-                          {product.spec_table.headers.map((h, i) => (
-                            <th key={i} style={{ padding: "7px 12px", textAlign: "left", color: "#8b5e3c", fontWeight: 700, fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.07em", borderBottom: "1px solid #edddd0", whiteSpace: "nowrap" }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(product.spec_table.rows || []).map((row, ri) => (
-                          <tr key={ri} style={{ borderBottom: ri < product.spec_table.rows.length - 1 ? "1px solid #f5ede3" : "none" }}>
-                            {product.spec_table.headers.map((h, ci) => (
-                              <td key={ci} style={{ padding: "7px 12px", color: "#5a4030", fontSize: "0.78rem" }}>{row[h] || "-"}</td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {files.length > 0 && (
-                <div style={{ marginTop: 4 }}>
-                  <ResourcesDropdown files={files} />
-                </div>
-              )}
-
-              {!hasShortDesc && !hasDesc && !hasFeatures && !hasSpec && !hasSpecTable && files.length === 0 && (
+              {!hasShortDesc && !hasFeatures && (
                 <p style={{ fontFamily: "'Montserrat',sans-serif", color: "#a67853", fontStyle: "italic", fontSize: "0.86rem" }}>
                   More details coming soon.
                 </p>
@@ -702,18 +772,107 @@ export default function ProductPage() {
           </div>
         </div>
 
-        <div style={{ maxWidth: 1140, margin: "44px auto 0", padding: "0 32px" }}>
-          <div style={{ height: 1, background: "linear-gradient(to right,transparent,#edddd0,transparent)" }} />
-        </div>
+        {/* ── SECTION 2: Full Description ───────────────────────────── */}
+        {(hasDesc || hasSpecTable) && (
+          <>
+            <Divider />
+            <div
+              className="pp-outer"
+              style={{ maxWidth: 1140, margin: "0 auto", padding: "48px 32px" }}
+            >
+              {hasDesc && (
+                <div style={{ marginBottom: hasSpecTable ? 40 : 0 }}>
+                  <SectionLabel icon="fa-solid fa-align-left" text="Description" />
+                  <div
+                    style={{
+                      fontFamily: "'Montserrat',sans-serif", color: "#5a4030",
+                      lineHeight: 1.85, fontSize: "0.9rem",
+                      maxWidth: "100%",
+                    }}
+                    dangerouslySetInnerHTML={{ __html: product.description }}
+                  />
+                </div>
+              )}
 
+              {hasSpecTable && (
+                <div>
+                  <SectionLabel icon="fa-solid fa-table" text="Technical Data" />
+                  <div style={{ overflowX: "auto", borderRadius: 10, border: "1px solid #edddd0" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Montserrat',sans-serif", fontSize: "0.8rem" }}>
+                      <thead>
+                        <tr style={{ background: "#faf7f4" }}>
+                          {product.spec_table.headers.map((h, i) => (
+                            <th key={i} style={{
+                              padding: "9px 14px", textAlign: "left", color: "#8b5e3c",
+                              fontWeight: 700, fontSize: "0.65rem", textTransform: "uppercase",
+                              letterSpacing: "0.07em", borderBottom: "1px solid #edddd0", whiteSpace: "nowrap",
+                            }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(product.spec_table.rows || []).map((row, ri) => (
+                          <tr key={ri} style={{ borderBottom: ri < product.spec_table.rows.length - 1 ? "1px solid #f5ede3" : "none" }}>
+                            {product.spec_table.headers.map((h, ci) => (
+                              <td key={ci} style={{ padding: "8px 14px", color: "#5a4030", fontSize: "0.8rem" }}>{row[h] || "–"}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ── SECTION 3: Diagrams + Resources ───────────────────────── */}
+        {hasSection3 && (
+          <>
+            <Divider />
+            <div
+              className="pp-outer"
+              style={{ maxWidth: 1140, margin: "0 auto", padding: "48px 32px" }}
+            >
+              <div
+                className="pp-s3-grid"
+                style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "start" }}
+              >
+                {/* LEFT: Diagrams */}
+                <div>
+                  {hasSpec ? (
+                    <>
+                      <SectionLabel icon="fa-solid fa-diagram-project" text="Diagrams" />
+                      <DiagramCarousel images={product.spec_images} onImageClick={openLightbox} />
+                    </>
+                  ) : (
+                    <div style={{
+                      display: "flex", flexDirection: "column", alignItems: "center",
+                      justifyContent: "center", minHeight: 180, color: "#c4a882",
+                      fontFamily: "'Montserrat',sans-serif", fontSize: "0.82rem",
+                      textAlign: "center", gap: 10, border: "1px dashed #e0cfc0", borderRadius: 10,
+                    }}>
+                      <i className="fa-regular fa-image" style={{ fontSize: "2rem", color: "#ddc9b4" }} />
+                      No diagrams available
+                    </div>
+                  )}
+                </div>
+
+                {/* RIGHT: PDF Resources */}
+                <div>
+                  <SectionLabel icon="fa-solid fa-file-arrow-down" text="Resources" />
+                  <ResourcesPanel files={files} />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── SECTION 4: Related Products ───────────────────────────── */}
         <RelatedProducts currentSlug={slug} categories={product.categories} />
+
       </div>
     </>
   );
 }
-
-
-
-
-
-
