@@ -36,6 +36,47 @@ async function uploadFileToSupabase(file, bucket = "product-images") {
   return data.publicUrl;
 }
 
+// ─── Extract storage path from a public URL ────────────────────────────────
+// e.g. "https://<project>.supabase.co/storage/v1/object/public/product-images/1234_abc.jpg"
+// → { bucket: "product-images", path: "1234_abc.jpg" }
+function parseStorageUrl(url) {
+  if (!url) return null;
+  try {
+    const match = url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)/);
+    if (!match) return null;
+    return { bucket: match[1], path: match[2] };
+  } catch {
+    return null;
+  }
+}
+
+// ─── Delete all storage files associated with a product row ───────────────
+async function deleteProductStorageFiles(product) {
+  // Collect every URL stored on the product
+  const urls = [
+    product.thumbnail,
+    ...(product.images || []),
+    ...(product.spec_images || []),
+    ...(product.files || []).map(f => f?.url),
+  ].filter(Boolean);
+
+  // Group by bucket
+  const byBucket = {};
+  for (const url of urls) {
+    const parsed = parseStorageUrl(url);
+    if (!parsed) continue;
+    if (!byBucket[parsed.bucket]) byBucket[parsed.bucket] = [];
+    byBucket[parsed.bucket].push(parsed.path);
+  }
+
+  // Fire off deletions (best-effort — don't throw on partial failures)
+  await Promise.allSettled(
+    Object.entries(byBucket).map(([bucket, paths]) =>
+      supabase.storage.from(bucket).remove(paths)
+    )
+  );
+}
+
 // - Toast ------------------------------
 function useToast() {
   const [toasts, setToasts] = useState([]);
@@ -363,7 +404,9 @@ function UnsavedConfirm({ open, onStay, onDiscard }) {
   );
 }
 
-// - Grid Card (minimalist, hover reveals options icon) --------
+// ─── Grid Card ────────────────────────────────────────────────────────────────
+// Clicking the product NAME opens the product page on the current domain.
+// The three-dot menu still exposes Edit / Delete.
 function ProductCard({ p, onEdit, onDelete }) {
   const [hovered, setHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -375,6 +418,11 @@ function ProductCard({ p, onEdit, onDelete }) {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
+
+  // ── Build the product URL relative to the current domain ──────────────────
+  // Uses FRONT_URL env var when set (e.g. in production), otherwise falls
+  // back to window.location.origin so the link always stays on the same host.
+  const productUrl = `${FRONT_URL || window.location.origin}/products/${p.slug}`;
 
   return (
     <div
@@ -388,7 +436,7 @@ function ProductCard({ p, onEdit, onDelete }) {
           ? <img src={p.thumbnail} alt={p.name} />
           : <i className="fa-regular fa-image" style={{ fontSize: "1.5rem", color: "var(--border)" }} />
         }
-        {/* Options button - shown only on hover */}
+        {/* Options button — shown only on hover */}
         {hovered && (
           <div className="product-grid-options" ref={menuRef}>
             <button
@@ -412,9 +460,17 @@ function ProductCard({ p, onEdit, onDelete }) {
         )}
       </div>
 
-      {/* Info - name, category pills, tag pills */}
+      {/* Info — name is a link to the product page on the current domain */}
       <div className="product-grid-info">
-        <div className="product-grid-name">{p.name}</div>
+        <a
+          href={productUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="product-grid-name product-name-link"
+          style={{ textDecoration: "none", color: "inherit" }}
+        >
+          {p.name}
+        </a>
         {(p.categories || []).length > 0 && (
           <div className="product-grid-pills">
             {(p.categories || []).slice(0, 2).map(c => (
@@ -481,7 +537,7 @@ export default function Products({ currentUser }) {
     try {
       let q = supabase
         .from("products")
-        .select("id,name,slug,brand,type,status,visible,featured,thumbnail,categories,tags,files,created_at,updated_at,created_by_username")
+        .select("id,name,slug,brand,type,status,visible,featured,thumbnail,categories,tags,files,images,spec_images,created_at,updated_at,created_by_username")
         .order("created_at", { ascending: sortDir === "asc" });
       if (filterStatus) q = q.eq("status", filterStatus);
       const { data, error } = await q;
@@ -652,25 +708,53 @@ export default function Products({ currentUser }) {
     finally { setSaving(false); }
   };
 
-  // - Delete ----------------------------
+  // ─── Delete single — also removes storage files ───────────────────────────
   const handleDelete = async () => {
+    const target = confirmDel;
+    setConfirmDel(null);
     try {
-      const { error } = await supabase.from("products").delete().eq("id", confirmDel.id);
-      if (error) throw error;
-      add("Deleted.", "success");
+      // 1. Fetch the full product row so we have all image/file URLs
+      const { data: fullProduct, error: fetchErr } = await supabase
+        .from("products")
+        .select("*")
+        .eq("id", target.id)
+        .single();
+      if (fetchErr) throw fetchErr;
+
+      // 2. Delete the database row
+      const { error: delErr } = await supabase.from("products").delete().eq("id", target.id);
+      if (delErr) throw delErr;
+
+      // 3. Best-effort: remove all associated storage files
+      await deleteProductStorageFiles(fullProduct);
+
+      add("Product and associated files deleted.", "success");
     } catch (err) { add(err.message, "error"); }
-    finally { setConfirmDel(null); fetchProducts(); }
+    finally { fetchProducts(); }
   };
 
-  // - Bulk delete -------------------------
+  // ─── Bulk delete — also removes storage files ─────────────────────────────
   const handleBulkDelete = async () => {
+    const ids = Array.from(selected);
+    setBulkConfirm(false);
     try {
-      const ids = Array.from(selected);
-      const { error } = await supabase.from("products").delete().in("id", ids);
-      if (error) throw error;
-      add(`${ids.length} product(s) deleted.`, "success");
+      // 1. Fetch all full product rows to get URLs
+      const { data: fullProducts, error: fetchErr } = await supabase
+        .from("products")
+        .select("*")
+        .in("id", ids);
+      if (fetchErr) throw fetchErr;
+
+      // 2. Delete database rows
+      const { error: delErr } = await supabase.from("products").delete().in("id", ids);
+      if (delErr) throw delErr;
+
+      // 3. Best-effort: remove storage files for each product
+      await Promise.allSettled((fullProducts || []).map(p => deleteProductStorageFiles(p)));
+
+      add(`${ids.length} product(s) and their files deleted.`, "success");
     } catch (err) { add(err.message, "error"); }
-    finally { setBulkConfirm(false); setSelected(new Set()); fetchProducts(); }
+    finally { setSelected(new Set()); fetchProducts(); }
   };
 
   const toggleSelect = id => {
@@ -705,7 +789,9 @@ export default function Products({ currentUser }) {
     setForm(f => ({ ...f, name, slug: slugEdited ? f.slug : slugify(name) }));
   };
 
-  const productUrl = slug => `${FRONT_URL}/products/${slug}`;
+  // ── Product URL helper — uses current domain as fallback ──────────────────
+  const productUrl = slug =>
+    `${FRONT_URL || window.location.origin}/products/${slug}`;
 
   const formatDate = d => d
     ? new Date(d).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })
@@ -841,6 +927,7 @@ export default function Products({ currentUser }) {
                     </td>
                     {/* Name */}
                     <td>
+                      {/* ── List view: name links to product on current domain ── */}
                       <a
                         href={productUrl(p.slug)}
                         target="_blank"
@@ -1040,7 +1127,7 @@ export default function Products({ currentUser }) {
         onClose={() => setBulkConfirm(false)}
         onConfirm={handleBulkDelete}
         title="Delete Selected?"
-        message={`Delete ${selected.size} selected product(s)? This cannot be undone.`}
+        message={`Delete ${selected.size} selected product(s)? This cannot be undone. All associated images and files will also be removed.`}
         confirmLabel="Delete All"
       />
 
@@ -1049,15 +1136,9 @@ export default function Products({ currentUser }) {
         onClose={() => setConfirmDel(null)}
         onConfirm={handleDelete}
         title="Delete Product?"
-        message={`Delete "${confirmDel?.name}"? This cannot be undone.`}
+        message={`Delete "${confirmDel?.name}"? This cannot be undone. All associated images and files will also be removed.`}
         confirmLabel="Delete"
       />
     </div>
   );
 }
-
-
-
-
-
-
