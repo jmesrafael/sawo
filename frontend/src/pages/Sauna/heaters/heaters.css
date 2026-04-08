@@ -1,0 +1,174 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap');
+
+/* ============================================================
+   heaters.css — Shared styles for all heater category pages
+   (Stone, Dragonfire, Floor, Combi, Tower, WallMounted)
+   ============================================================ */
+
+/* ---- Hero ---- */
+.wm-hero-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.48); z-index: 0;
+}
+.wm-hero-content {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 10px;
+}
+.wm-hero-title {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 45px; line-height: 52px;
+  font-weight: 700; color: #fff; margin: 0;
+}
+.wm-hero-subtitle {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 20px; font-weight: 300;
+  color: rgba(255,255,255,0.88); margin: 0;
+}
+
+/* ---- Layout ---- */
+.wm-container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+.wm-section   { padding: 36px 0; }
+.wm-section--flush-bottom { padding-bottom: 0; }
+.wm-section--flush-top    { padding-top: 16px; }
+
+/* ---- Intro desc (wide, tight) ---- */
+.wm-intro-desc {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 1rem; font-weight: 400;
+  color: #555; line-height: 1.75;
+  max-width: 100%; margin: 0 auto;
+}
+
+/* ---- Section title & desc ---- */
+.wm-products-title {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 1.85rem; font-weight: 700;
+  background: linear-gradient(135deg, #AA8161 0%, #c4a077 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  margin-bottom: 10px; line-height: 1.2;
+}
+.wm-products-desc {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.97rem; font-weight: 400;
+  color: #555; line-height: 1.75;
+  max-width: 100%; margin: 0 auto;
+}
+
+/* ---- Filter tabs ---- */
+.wm-filter-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+.wm-filter-btn {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.75rem; font-weight: 600;
+  letter-spacing: 0.8px; padding: 7px 16px;
+  border-radius: 999px; border: 1.5px solid #e0d0c0;
+  background: transparent; color: #888;
+  cursor: pointer; transition: all 0.25s ease;
+}
+.wm-filter-btn:hover   { border-color: #AA8161; color: #AA8161; }
+.wm-filter-btn--active { background: #AA8161; border-color: #AA8161; color: #fff; }
+
+/* ---- Product groups ---- */
+.wm-group { margin-bottom: 40px; }
+.wm-group-title {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.9rem; font-weight: 700;
+  color: #AA8161; text-transform: uppercase;
+  letter-spacing: 1.5px; padding-bottom: 8px;
+  border-bottom: 2px solid #ede5db; margin-bottom: 20px;
+}
+.wm-products-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+/* ---- Product item ---- */
+.wm-product-item {
+  display: flex; flex-direction: column;
+  align-items: center; text-align: center;
+  cursor: default;
+}
+.wm-product-img-wrap {
+  width: 100%; aspect-ratio: 1 / 1;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; transition: transform 0.3s ease;
+}
+.wm-product-item:hover .wm-product-img-wrap { transform: scale(1.04); }
+.wm-product-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.wm-product-img-placeholder {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  color: #ddd; font-size: 1.8rem;
+}
+.wm-product-name {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.78rem; font-weight: 600;
+  color: #444; margin-top: 8px; line-height: 1.35;
+}
+.wm-product-power {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.72rem; font-weight: 500;
+  color: #AA8161; margin-top: 2px;
+}
+
+/* ---- Why SAWO ---- */
+.wm-why-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
+.wm-eyebrow {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.72rem; font-weight: 600;
+  letter-spacing: 2.5px; color: #AA8161;
+  text-transform: uppercase; margin-bottom: 8px;
+}
+.wm-why-title {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 2rem; font-weight: 700;
+  color: #AA8161; margin-bottom: 14px; line-height: 1.2;
+}
+.wm-why-desc {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.97rem; font-weight: 400;
+  color: #444; line-height: 1.8; margin-bottom: 10px;
+}
+.wm-brochure-btn {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.82rem; font-weight: 600;
+  letter-spacing: 1px; padding: 11px 30px;
+  border: 2px solid #AA8161; color: #AA8161;
+  background: transparent; border-radius: 6px;
+  text-decoration: none; display: inline-block;
+  transition: all 0.3s ease;
+}
+.wm-brochure-btn:hover { background: #AA8161; color: #fff; }
+
+/* ---- Banner ---- */
+.wm-banner {
+  background: linear-gradient(135deg, #AA8161 0%, #c4a077 100%);
+  padding: 64px 24px; text-align: center;
+}
+.wm-banner-content { max-width: 700px; margin: 0 auto; }
+.wm-banner-title {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 2.2rem; font-weight: 700;
+  color: #fff; margin-bottom: 12px; line-height: 1.2;
+}
+.wm-banner-sub {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 1rem; font-weight: 300;
+  color: rgba(255,255,255,0.9); margin: 0; line-height: 1.6;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1024px) { .wm-products-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 768px) {
+  .wm-hero-title    { font-size: 28px; line-height: 36px; }
+  .wm-hero-subtitle { font-size: 16px; }
+  .wm-why-grid      { grid-template-columns: 1fr; gap: 30px; }
+  .wm-products-grid { grid-template-columns: repeat(2, 1fr); }
+  .wm-why-title     { font-size: 1.6rem; }
+  .wm-section       { padding: 28px 0; }
+  .wm-banner-title  { font-size: 1.7rem; }
+}
+@media (max-width: 480px) {
+  .wm-products-grid { grid-template-columns: repeat(2, 1fr); }
+}
