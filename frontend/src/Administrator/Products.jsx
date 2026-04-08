@@ -4,7 +4,7 @@ import { supabase } from "./supabase";
 
 const FRONT_URL = process.env.REACT_APP_FRONT_URL || "";
 
-// - Helpers -----------------------------
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function slugify(str) {
   return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
@@ -27,22 +27,96 @@ const EMPTY_FORM = {
   visible: true, featured: false, sort_order: 0,
 };
 
+// ─── WebP conversion + resize before upload ───────────────────────────────────
+// Converts any image File to a WebP Blob at up to WEBP_MAX_DIM px on the long side.
+// Quality 0.82 gives excellent visuals at ~60-70% of equivalent JPEG size.
+const WEBP_QUALITY = 0.82;
+const WEBP_MAX_DIM = 1800; // px — enough for full-bleed, nothing wasteful
+
+function convertToWebP(file, maxDim = WEBP_MAX_DIM, quality = WEBP_QUALITY) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+
+      // Downscale if needed, preserve aspect ratio
+      if (width > maxDim || height > maxDim) {
+        if (width >= height) {
+          height = Math.round((height / width) * maxDim);
+          width  = maxDim;
+        } else {
+          width  = Math.round((width / height) * maxDim);
+          height = maxDim;
+        }
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width  = width;
+      canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        blob => blob ? resolve(blob) : reject(new Error("WebP conversion failed")),
+        "image/webp",
+        quality
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Image load failed"));
+    };
+
+    img.src = objectUrl;
+  });
+}
+
+// ─── Upload with automatic WebP conversion ────────────────────────────────────
 async function uploadFileToSupabase(file, bucket = "product-images") {
-  const ext = file.name.split(".").pop();
-  const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-  const { error } = await supabase.storage.from(bucket).upload(path, file, { cacheControl: "3600", upsert: false });
+  let uploadBlob;
+  let fileName;
+
+  if (file.type.startsWith("image/")) {
+    // Convert image → WebP
+    try {
+      uploadBlob = await convertToWebP(file);
+      fileName   = `${Date.now()}_${Math.random().toString(36).slice(2)}.webp`;
+    } catch (err) {
+      // Fallback: upload original if conversion fails
+      console.warn("WebP conversion failed, uploading original:", err);
+      uploadBlob = file;
+      const ext  = file.name.split(".").pop();
+      fileName   = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    }
+  } else {
+    // Non-image (PDF etc.) — upload as-is
+    uploadBlob = file;
+    const ext  = file.name.split(".").pop();
+    fileName   = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  }
+
+  const contentType = file.type.startsWith("image/") ? "image/webp" : file.type;
+
+  const { error } = await supabase.storage
+    .from(bucket)
+    .upload(fileName, uploadBlob, { cacheControl: "3600", upsert: false, contentType });
   if (error) throw new Error(error.message);
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(fileName);
   return data.publicUrl;
 }
 
-// ─── Extract storage path from a public URL ────────────────────────────────
-// e.g. "https://<project>.supabase.co/storage/v1/object/public/product-images/1234_abc.jpg"
-// → { bucket: "product-images", path: "1234_abc.jpg" }
+// ─── Extract bucket + path from a Supabase public URL ─────────────────────────
+// e.g. "https://<proj>.supabase.co/storage/v1/object/public/product-images/abc.webp"
+// → { bucket: "product-images", path: "abc.webp" }
 function parseStorageUrl(url) {
   if (!url) return null;
   try {
-    const match = url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)/);
+    const clean = url.split("?")[0]; // strip transform params
+    const match = clean.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)/);
     if (!match) return null;
     return { bucket: match[1], path: match[2] };
   } catch {
@@ -50,26 +124,14 @@ function parseStorageUrl(url) {
   }
 }
 
-// ─── Delete all storage files associated with a product row ───────────────
-async function deleteProductStorageFiles(product) {
-  // Collect every URL stored on the product
-  const urls = [
-    product.thumbnail,
-    ...(product.images || []),
-    ...(product.spec_images || []),
-    ...(product.files || []).map(f => f?.url),
-  ].filter(Boolean);
-
-  // Group by bucket
+// ─── Delete a set of URLs from storage (best-effort, grouped by bucket) ───────
+async function deleteStorageUrls(urls = []) {
   const byBucket = {};
   for (const url of urls) {
     const parsed = parseStorageUrl(url);
     if (!parsed) continue;
-    if (!byBucket[parsed.bucket]) byBucket[parsed.bucket] = [];
-    byBucket[parsed.bucket].push(parsed.path);
+    (byBucket[parsed.bucket] = byBucket[parsed.bucket] || []).push(parsed.path);
   }
-
-  // Fire off deletions (best-effort — don't throw on partial failures)
   await Promise.allSettled(
     Object.entries(byBucket).map(([bucket, paths]) =>
       supabase.storage.from(bucket).remove(paths)
@@ -77,7 +139,35 @@ async function deleteProductStorageFiles(product) {
   );
 }
 
-// - Toast ------------------------------
+// ─── Delete ALL storage assets tied to a product row ──────────────────────────
+async function deleteProductStorageFiles(product) {
+  const urls = [
+    product.thumbnail,
+    ...(product.images      || []),
+    ...(product.spec_images || []),
+    ...(product.files       || []).map(f => f?.url),
+  ].filter(Boolean);
+  await deleteStorageUrls(urls);
+}
+
+// ─── Find URLs present in `savedForm` but removed in `currentForm` ────────────
+// These are orphans — the user deleted or replaced them during editing.
+// Only URLs that actually live in our Supabase storage buckets are returned.
+function findOrphanedUrls(savedForm, currentForm) {
+  const collect = f => [
+    f.thumbnail,
+    ...(f.images      || []),
+    ...(f.spec_images || []),
+    ...(f.files       || []).map(fi => fi?.url),
+  ].filter(Boolean).filter(url => parseStorageUrl(url) !== null);
+
+  const savedSet   = new Set(collect(savedForm));
+  const currentSet = new Set(collect(currentForm));
+
+  return [...savedSet].filter(url => !currentSet.has(url));
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
 function useToast() {
   const [toasts, setToasts] = useState([]);
   const add = (message, type = "info") => {
@@ -308,7 +398,7 @@ function ImageUploader({ onUpload, label = "Upload Image", multiple = false, upl
       <input ref={ref} type="file" accept="image/*" multiple={multiple} style={{ display: "none" }}
         onChange={e => handleFiles(multiple ? e.target.files : e.target.files[0])} />
       {uploading
-        ? <><i className="fa-solid fa-spinner" style={{ color: "var(--brand)", fontSize: "1.1rem", animation: "spin 1s linear infinite" }} /><p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "5px 0 0" }}>Uploading...</p></>
+        ? <><i className="fa-solid fa-spinner" style={{ color: "var(--brand)", fontSize: "1.1rem", animation: "spin 1s linear infinite" }} /><p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "5px 0 0" }}>Converting &amp; uploading…</p></>
         : <><i className="fa-solid fa-cloud-arrow-up" style={{ color: "var(--brand)", fontSize: "1.2rem" }} /><p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "5px 0 0" }}>{label}</p></>
       }
     </div>
@@ -335,14 +425,14 @@ function ThumbnailUploader({ onUpload, uploading }) {
       {uploading ? (
         <>
           <i className="fa-solid fa-spinner" style={{ color: "var(--brand)", fontSize: "1.8rem", animation: "spin 1s linear infinite" }} />
-          <span style={{ fontSize: "0.82rem", color: "var(--text-3)" }}>Uploading...</span>
+          <span style={{ fontSize: "0.82rem", color: "var(--text-3)" }}>Converting &amp; uploading…</span>
         </>
       ) : (
         <>
           <div className="thumb-upload-icon"><i className="fa-solid fa-image" /></div>
           <div style={{ textAlign: "center" }}>
             <p style={{ fontWeight: 700, fontSize: "0.85rem", color: "var(--text)", margin: "0 0 4px" }}>Add Featured Image</p>
-            <p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: 0 }}>Click to browse or drag &amp; drop</p>
+            <p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: 0 }}>Click to browse or drag &amp; drop · auto-converted to WebP</p>
           </div>
           <div className="thumb-upload-cta">
             <i className="fa-solid fa-arrow-up-from-bracket" /> Choose Image
@@ -405,8 +495,6 @@ function UnsavedConfirm({ open, onStay, onDiscard }) {
 }
 
 // ─── Grid Card ────────────────────────────────────────────────────────────────
-// Clicking the product NAME opens the product page on the current domain.
-// The three-dot menu still exposes Edit / Delete.
 function ProductCard({ p, onEdit, onDelete }) {
   const [hovered, setHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -419,9 +507,6 @@ function ProductCard({ p, onEdit, onDelete }) {
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
 
-  // ── Build the product URL relative to the current domain ──────────────────
-  // Uses FRONT_URL env var when set (e.g. in production), otherwise falls
-  // back to window.location.origin so the link always stays on the same host.
   const productUrl = `${FRONT_URL || window.location.origin}/products/${p.slug}`;
 
   return (
@@ -430,13 +515,11 @@ function ProductCard({ p, onEdit, onDelete }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false); setMenuOpen(false); }}
     >
-      {/* Thumbnail */}
       <div className="product-grid-thumb">
         {p.thumbnail
           ? <img src={p.thumbnail} alt={p.name} />
           : <i className="fa-regular fa-image" style={{ fontSize: "1.5rem", color: "var(--border)" }} />
         }
-        {/* Options button — shown only on hover */}
         {hovered && (
           <div className="product-grid-options" ref={menuRef}>
             <button
@@ -460,7 +543,6 @@ function ProductCard({ p, onEdit, onDelete }) {
         )}
       </div>
 
-      {/* Info — name is a link to the product page on the current domain */}
       <div className="product-grid-info">
         <a
           href={productUrl}
@@ -493,7 +575,7 @@ function ProductCard({ p, onEdit, onDelete }) {
   );
 }
 
-//  Main Component 
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function Products({ currentUser }) {
   const { toasts, add, remove } = useToast();
 
@@ -504,16 +586,17 @@ export default function Products({ currentUser }) {
 
   const [search, setSearch]             = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [sortDir, setSortDir]           = useState("desc"); // "asc" | "desc"
+  const [sortDir, setSortDir]           = useState("desc");
   const [viewMode, setViewMode]         = useState("list");
 
-  // Multi-select
   const [selected, setSelected]         = useState(new Set());
   const [bulkConfirm, setBulkConfirm]   = useState(false);
 
   const [modalOpen, setModalOpen]       = useState(false);
   const [editing, setEditing]           = useState(null);
   const [form, setForm]                 = useState(EMPTY_FORM);
+  // savedForm = exact snapshot of the product when the modal opened.
+  // Used for: (1) dirty-check, (2) detecting orphaned storage files on save.
   const [savedForm, setSavedForm]       = useState(EMPTY_FORM);
   const [slugEdited, setSlugEdited]     = useState(false);
   const [saving, setSaving]             = useState(false);
@@ -531,7 +614,7 @@ export default function Products({ currentUser }) {
   const fileInputRef = useRef();
   const isDirty = !formsEqual(form, savedForm);
 
-  // - Fetch ----------------------------
+  // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
@@ -565,13 +648,13 @@ export default function Products({ currentUser }) {
     await supabase.from(table).upsert(rows, { onConflict: "slug", ignoreDuplicates: true });
   };
 
-  // - Image uploads ------------------------
+  // ── Image uploads (all auto-converted to WebP) ─────────────────────────────
   const handleThumbUpload = async file => {
     setUpThumb(true);
     try {
       const url = await uploadFileToSupabase(file, "product-images");
       setForm(f => ({ ...f, thumbnail: url }));
-      add("Thumbnail uploaded.", "success");
+      add("Thumbnail converted to WebP and uploaded.", "success");
     } catch (err) { add(err.message, "error"); }
     finally { setUpThumb(false); }
   };
@@ -582,7 +665,7 @@ export default function Products({ currentUser }) {
       const arr = Array.isArray(files) ? files : [files];
       const urls = await Promise.all(arr.map(f => uploadFileToSupabase(f, "product-images")));
       setForm(f => ({ ...f, images: [...f.images, ...urls] }));
-      add(`${urls.length} image(s) uploaded.`, "success");
+      add(`${urls.length} image(s) converted to WebP and uploaded.`, "success");
     } catch (err) { add(err.message, "error"); }
     finally { setUpImgs(false); }
   };
@@ -593,7 +676,7 @@ export default function Products({ currentUser }) {
       const arr = Array.isArray(files) ? files : [files];
       const urls = await Promise.all(arr.map(f => uploadFileToSupabase(f, "product-images")));
       setForm(f => ({ ...f, spec_images: [...f.spec_images, ...urls] }));
-      add(`${urls.length} spec image(s) uploaded.`, "success");
+      add(`${urls.length} spec image(s) converted to WebP and uploaded.`, "success");
     } catch (err) { add(err.message, "error"); }
     finally { setUpSpec(false); }
   };
@@ -621,14 +704,14 @@ export default function Products({ currentUser }) {
   const renameFile = (i, name) => setForm(f => ({ ...f, files: f.files.map((fi, idx) => idx === i ? { ...fi, name } : fi) }));
   const removeFile = i => setForm(f => ({ ...f, files: f.files.filter((_, idx) => idx !== i) }));
 
-  // - Modal guard -------------------------
+  // ── Modal guard ────────────────────────────────────────────────────────────
   const actualClose = () => { setModalOpen(false); setEditing(null); setUnsavedOpen(false); pendingClose.current = null; };
   const handleModalClose = () => { if (isDirty) { pendingClose.current = actualClose; setUnsavedOpen(true); } else actualClose(); };
   const closeModal = useCallback(() => { if (isDirty) { pendingClose.current = actualClose; setUnsavedOpen(true); } else actualClose(); }, [isDirty]); // eslint-disable-line
   const handleUnsavedStay    = () => { setUnsavedOpen(false); pendingClose.current = null; };
   const handleUnsavedDiscard = () => { actualClose(); };
 
-  // - Open add / edit -----------------------
+  // ── Open add / edit ────────────────────────────────────────────────────────
   const openCreate = () => {
     setEditing(null); setForm(EMPTY_FORM); setSavedForm(EMPTY_FORM);
     setSlugEdited(false); setModalOpen(true);
@@ -657,12 +740,16 @@ export default function Products({ currentUser }) {
         featured:          data.featured || false,
         sort_order:        data.sort_order || 0,
       };
-      setForm(loaded); setSavedForm(loaded); setSlugEdited(true);
-      setEditing(row); setModalOpen(true);
+      setForm(loaded);
+      // Keep a clean snapshot — this is our reference for orphan detection on save
+      setSavedForm(loaded);
+      setSlugEdited(true);
+      setEditing(row);
+      setModalOpen(true);
     } catch (err) { add(err.message, "error"); }
   };
 
-  // - Save ----------------------------
+  // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = async e => {
     e.preventDefault();
     if (!form.name) return add("Product name is required.", "error");
@@ -697,10 +784,23 @@ export default function Products({ currentUser }) {
       if (editing) {
         const { error } = await supabase.from("products").update(payload).eq("id", editing.id);
         if (error) throw error;
+
+        // ── Orphan cleanup ────────────────────────────────────────────────────
+        // Any URL that was in savedForm (the DB snapshot on open) but is no
+        // longer in the current form was deliberately removed by the user —
+        // either deleted from the strip, replaced by a new upload, or had the
+        // thumbnail cleared. We delete those files from storage now so they
+        // don't accumulate as dead weight in the bucket.
+        const orphans = findOrphanedUrls(savedForm, form);
+        if (orphans.length) {
+          await deleteStorageUrls(orphans);
+          console.info(`[Products] Removed ${orphans.length} orphaned file(s) from storage.`);
+        }
       } else {
         const { error } = await supabase.from("products").insert([payload]);
         if (error) throw error;
       }
+
       add(editing ? "Product saved." : "Product created.", "success");
       actualClose();
       fetchProducts();
@@ -708,50 +808,37 @@ export default function Products({ currentUser }) {
     finally { setSaving(false); }
   };
 
-  // ─── Delete single — also removes storage files ───────────────────────────
+  // ── Delete single ──────────────────────────────────────────────────────────
   const handleDelete = async () => {
     const target = confirmDel;
     setConfirmDel(null);
     try {
-      // 1. Fetch the full product row so we have all image/file URLs
       const { data: fullProduct, error: fetchErr } = await supabase
-        .from("products")
-        .select("*")
-        .eq("id", target.id)
-        .single();
+        .from("products").select("*").eq("id", target.id).single();
       if (fetchErr) throw fetchErr;
 
-      // 2. Delete the database row
       const { error: delErr } = await supabase.from("products").delete().eq("id", target.id);
       if (delErr) throw delErr;
 
-      // 3. Best-effort: remove all associated storage files
       await deleteProductStorageFiles(fullProduct);
-
       add("Product and associated files deleted.", "success");
     } catch (err) { add(err.message, "error"); }
     finally { fetchProducts(); }
   };
 
-  // ─── Bulk delete — also removes storage files ─────────────────────────────
+  // ── Bulk delete ────────────────────────────────────────────────────────────
   const handleBulkDelete = async () => {
     const ids = Array.from(selected);
     setBulkConfirm(false);
     try {
-      // 1. Fetch all full product rows to get URLs
       const { data: fullProducts, error: fetchErr } = await supabase
-        .from("products")
-        .select("*")
-        .in("id", ids);
+        .from("products").select("*").in("id", ids);
       if (fetchErr) throw fetchErr;
 
-      // 2. Delete database rows
       const { error: delErr } = await supabase.from("products").delete().in("id", ids);
       if (delErr) throw delErr;
 
-      // 3. Best-effort: remove storage files for each product
       await Promise.allSettled((fullProducts || []).map(p => deleteProductStorageFiles(p)));
-
       add(`${ids.length} product(s) and their files deleted.`, "success");
     } catch (err) { add(err.message, "error"); }
     finally { setSelected(new Set()); fetchProducts(); }
@@ -770,7 +857,7 @@ export default function Products({ currentUser }) {
     else setSelected(new Set(filtered.map(p => p.id)));
   };
 
-  // - Filter ----------------------------
+  // ── Filter ─────────────────────────────────────────────────────────────────
   const filtered = products.filter(p => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -789,9 +876,7 @@ export default function Products({ currentUser }) {
     setForm(f => ({ ...f, name, slug: slugEdited ? f.slug : slugify(name) }));
   };
 
-  // ── Product URL helper — uses current domain as fallback ──────────────────
-  const productUrl = slug =>
-    `${FRONT_URL || window.location.origin}/products/${slug}`;
+  const productUrl = slug => `${FRONT_URL || window.location.origin}/products/${slug}`;
 
   const formatDate = d => d
     ? new Date(d).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })
@@ -815,7 +900,7 @@ export default function Products({ currentUser }) {
         </div>
       </div>
 
-      {/* Toolbar - all controls + New Product in one row */}
+      {/* Toolbar */}
       <div className="products-toolbar">
         <div className="search-wrap">
           <i className="fa-solid fa-magnifying-glass" />
@@ -837,7 +922,6 @@ export default function Products({ currentUser }) {
           <option value="asc">Oldest first</option>
         </select>
 
-        {/* View Toggle */}
         <div className="view-toggle">
           {[{ mode: "list", icon: "fa-list" }, { mode: "grid", icon: "fa-grip" }].map(({ mode, icon }) => (
             <button
@@ -851,18 +935,16 @@ export default function Products({ currentUser }) {
           ))}
         </div>
 
-        {/* Bulk delete - only when items selected */}
         {selected.size > 0 && (
           <button type="button" className="btn btn-sm" style={{ background: "var(--danger-bg)", color: "var(--danger)", border: "1px solid var(--danger)", gap: 5 }} onClick={() => setBulkConfirm(true)}>
             <i className="fa-solid fa-trash" /> Delete {selected.size}
           </button>
         )}
 
-        {/* New Product */}
         <Btn icon="fa-plus" label="New Product" onClick={openCreate} />
       </div>
 
-      {/* - Grid View - */}
+      {/* Grid View */}
       {!loading && viewMode === "grid" && (
         <div className="product-grid">
           {filtered.length === 0 && (
@@ -876,7 +958,7 @@ export default function Products({ currentUser }) {
         </div>
       )}
 
-      {/* - List View - */}
+      {/* List View */}
       {viewMode === "list" && (
         <div className="products-table-wrap">
           {loading ? (
@@ -914,26 +996,17 @@ export default function Products({ currentUser }) {
                 )}
                 {filtered.map(p => (
                   <tr key={p.id} className={selected.has(p.id) ? "row-selected" : ""}>
-                    {/* Checkbox */}
                     <td style={{ paddingRight: 0 }}>
                       <input type="checkbox" className="tbl-checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
                     </td>
-                    {/* Thumbnail */}
                     <td style={{ width: 44 }}>
                       {p.thumbnail
                         ? <img src={p.thumbnail} alt="" className="product-thumb" />
                         : <div className="product-thumb-placeholder"><i className="fa-regular fa-image" /></div>
                       }
                     </td>
-                    {/* Name */}
                     <td>
-                      {/* ── List view: name links to product on current domain ── */}
-                      <a
-                        href={productUrl(p.slug)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="product-name-link"
-                      >
+                      <a href={productUrl(p.slug)} target="_blank" rel="noopener noreferrer" className="product-name-link">
                         {p.name}
                       </a>
                       <div className="product-meta">
@@ -949,7 +1022,6 @@ export default function Products({ currentUser }) {
                         )}
                       </div>
                     </td>
-                    {/* Categories */}
                     <td>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
                         {(p.categories || []).slice(0, 2).map(c => (
@@ -959,7 +1031,6 @@ export default function Products({ currentUser }) {
                         {!(p.categories || []).length && <span style={{ color: "var(--text-3)", fontSize: "0.72rem" }}>-</span>}
                       </div>
                     </td>
-                    {/* Tags */}
                     <td>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
                         {(p.tags || []).slice(0, 3).map(t => (
@@ -969,15 +1040,12 @@ export default function Products({ currentUser }) {
                         {!(p.tags || []).length && <span style={{ color: "var(--text-3)", fontSize: "0.72rem" }}>-</span>}
                       </div>
                     </td>
-                    {/* Status */}
                     <td>
                       <span className="tbl-status">
                         {!p.visible ? "Hidden" : p.status === "published" ? "Published" : "Draft"}
                       </span>
                     </td>
-                    {/* Date */}
                     <td className="tbl-date">{formatDate(p.updated_at)}</td>
-                    {/* Actions */}
                     <td style={{ textAlign: "right" }}>
                       <div className="table-actions">
                         <IconBtn icon="fa-pen"   title="Edit"   onClick={() => openEdit(p)} />
@@ -992,7 +1060,7 @@ export default function Products({ currentUser }) {
         </div>
       )}
 
-      {/*  Product Form Modal  */}
+      {/* Product Form Modal */}
       <Modal open={modalOpen} onClose={handleModalClose} title={editing ? `Edit: ${editing.name}` : "New Product"} wide>
         {isDirty && (
           <div className="dirty-banner">
@@ -1012,7 +1080,7 @@ export default function Products({ currentUser }) {
               <div className="thumb-actions">
                 <label className={`thumb-replace-label${upThumb ? " uploading" : ""}`}>
                   <i className="fa-solid fa-arrow-up-from-bracket" />
-                  {upThumb ? "Uploading..." : "Replace Image"}
+                  {upThumb ? "Converting & uploading…" : "Replace Image"}
                   <input type="file" accept="image/*" style={{ display: "none" }} disabled={upThumb}
                     onChange={e => { if (e.target.files[0]) { handleThumbUpload(e.target.files[0]); e.target.value = ""; } }} />
                 </label>
@@ -1052,13 +1120,13 @@ export default function Products({ currentUser }) {
               <ImageStrip images={form.images} onRemove={i => setForm(f => ({ ...f, images: f.images.filter((_, idx) => idx !== i) }))} />
               <label className={`add-more-label${upImgs ? " uploading" : ""}`}>
                 <i className="fa-solid fa-plus" />
-                {upImgs ? "Uploading..." : "Add More Images"}
+                {upImgs ? "Converting & uploading…" : "Add More Images"}
                 <input type="file" accept="image/*" multiple style={{ display: "none" }} disabled={upImgs}
                   onChange={e => e.target.files?.length && uploadMoreImages(Array.from(e.target.files))} />
               </label>
             </>
           ) : (
-            <ImageUploader onUpload={uploadMoreImages} label="Upload Gallery Images (multiple)" multiple uploading={upImgs} />
+            <ImageUploader onUpload={uploadMoreImages} label="Upload Gallery Images (multiple) · auto-converted to WebP" multiple uploading={upImgs} />
           )}
 
           <SectionLabel label="Spec / Diagram Images" />
@@ -1067,13 +1135,13 @@ export default function Products({ currentUser }) {
               <ImageStrip images={form.spec_images} onRemove={i => setForm(f => ({ ...f, spec_images: f.spec_images.filter((_, idx) => idx !== i) }))} />
               <label className={`add-more-label${upSpec ? " uploading" : ""}`}>
                 <i className="fa-solid fa-plus" />
-                {upSpec ? "Uploading..." : "Add More Spec Images"}
+                {upSpec ? "Converting & uploading…" : "Add More Spec Images"}
                 <input type="file" accept="image/*" multiple style={{ display: "none" }} disabled={upSpec}
                   onChange={e => e.target.files?.length && uploadSpecImages(Array.from(e.target.files))} />
               </label>
             </>
           ) : (
-            <ImageUploader onUpload={uploadSpecImages} label="Upload Spec Images" multiple uploading={upSpec} />
+            <ImageUploader onUpload={uploadSpecImages} label="Upload Spec Images · auto-converted to WebP" multiple uploading={upSpec} />
           )}
 
           <SectionLabel label="Resources (PDFs - Brochures, Manuals)" />
