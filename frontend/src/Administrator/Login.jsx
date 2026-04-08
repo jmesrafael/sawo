@@ -22,7 +22,7 @@ export default function Login() {
 
 useEffect(() => {
   document.documentElement.setAttribute("data-theme", "light");
-  if (getSession()) navigate("/admin/users");
+  if (getSession()) navigate("/admin/products");
 }, [navigate]);
 
   const handleLogin = async (e) => {
@@ -31,7 +31,7 @@ useEffect(() => {
     try {
       const { user, token } = await apiLogin(username, password);
       saveSession(token, user, remember);
-      navigate("/admin/users");
+      navigate("/admin/products");
     } catch (err) {
       setError(err.message || "Login failed");
     }
