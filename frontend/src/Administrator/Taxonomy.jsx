@@ -1,4 +1,4 @@
-﻿// src/Administrator/Taxonomy.jsx
+// src/Administrator/Taxonomy.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 
@@ -6,7 +6,7 @@ function slugify(str) {
   return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-// - Shared Modal (matches Products modal style) -----------
+// ── Shared Modal ──────────────────────────────────────────────────────────────
 function Modal({ open, onClose, title, children, wide }) {
   if (!open) return null;
   return (
@@ -22,7 +22,7 @@ function Modal({ open, onClose, title, children, wide }) {
   );
 }
 
-// - Products-for-term drawer --------------------
+// ── Products-for-term drawer ──────────────────────────────────────────────────
 function TermProductsModal({ open, onClose, term, field }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading]   = useState(false);
@@ -64,11 +64,11 @@ function TermProductsModal({ open, onClose, term, field }) {
   );
 }
 
-// - Form Modal (matches Products modal styling) -----------
+// ── Form Modal ────────────────────────────────────────────────────────────────
 function TaxFormModal({ open, onClose, editItem, table, hasDescription, onSaved }) {
-  const [form, setForm]         = useState({ name: "", slug: "", description: "" });
-  const [error, setError]       = useState("");
-  const [loading, setLoading]   = useState(false);
+  const [form, setForm]       = useState({ name: "", slug: "", description: "" });
+  const [error, setError]     = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -151,105 +151,132 @@ function TaxFormModal({ open, onClose, editItem, table, hasDescription, onSaved 
   );
 }
 
-// - Term Card ----------------------------
-function TermCard({ item, onEdit, onClick }) {
+// ── Tax Card ──────────────────────────────────────────────────────────────────
+function TaxCard({ item, isCategory, productCount, selectMode, selected, onToggleSelect, onEdit, onDelete, onViewProducts }) {
   const [hovered, setHovered] = useState(false);
 
-  return (
-    <div
-      className="term-card"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={() => onClick(item.name)}
-      title={`View products using "${item.name}"`}
-    >
-      {/* Edit pencil - top-right on hover */}
-      {hovered && (
-        <button
-          type="button"
-          className="term-card-edit-btn"
-          onClick={e => { e.stopPropagation(); onEdit(item); }}
-          title="Edit"
-        >
-          <i className="fa-solid fa-pen" />
-        </button>
-      )}
-      <div className="term-card-icon">
-        <i className="fa-solid fa-folder" style={{ color: "var(--brand)", fontSize: "1rem" }} />
-      </div>
-      <div className="term-card-name">{item.name}</div>
-      {item.description && (
-        <div className="term-card-desc">{item.description}</div>
-      )}
-      <div className="term-card-slug">{item.slug}</div>
-    </div>
-  );
-}
+  const createdDate = new Date(item.created_at).toLocaleDateString("en-PH", {
+    month: "short", day: "numeric", year: "numeric",
+  });
 
-function TagCard({ item, onEdit, onClick }) {
-  const [hovered, setHovered] = useState(false);
-
-  return (
-    <div
-      className="term-card term-card-tag"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={() => onClick(item.name)}
-      title={`View products using "${item.name}"`}
-    >
-      {hovered && (
-        <button
-          type="button"
-          className="term-card-edit-btn"
-          onClick={e => { e.stopPropagation(); onEdit(item); }}
-          title="Edit"
-        >
-          <i className="fa-solid fa-pen" />
-        </button>
-      )}
-      <div className="term-card-icon term-card-icon-tag">
-        <i className="fa-solid fa-tag" style={{ color: "var(--brand-dark)", fontSize: "0.9rem" }} />
-      </div>
-      <div className="term-card-name">{item.name}</div>
-      <div className="term-card-slug">{item.slug}</div>
-    </div>
-  );
-}
-
-// - Tab section ---------------------------
-function TaxTab({ table, label, icon, hasDescription }) {
-  const [items, setItems]         = useState([]);
-  const [search, setSearch]       = useState("");
-  const [selected, setSelected]   = useState(new Set());
-  const [formOpen, setFormOpen]   = useState(false);
-  const [editItem, setEditItem]   = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [bulkConfirm, setBulkConfirm]     = useState(false);
-  const [productsModal, setProductsModal] = useState(null); // term name
-
-  const fetch = async () => {
-    const { data } = await supabase.from(table).select("*").order("name");
-    if (data) setItems(data);
-    setSelected(new Set());
+  const handleCardClick = () => {
+    if (selectMode) {
+      onToggleSelect(item.id);
+    } else {
+      onViewProducts(item.name);
+    }
   };
 
-  useEffect(() => { fetch(); }, [table]); // eslint-disable-line
+  return (
+    <div
+      className={[
+        "tax-grid-card",
+        isCategory ? "tax-grid-card--category" : "tax-grid-card--tag",
+        selected ? "tax-grid-card--selected" : "",
+        selectMode ? "tax-grid-card--selectable" : "",
+      ].filter(Boolean).join(" ")}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={handleCardClick}
+      title={selectMode ? undefined : `View products using "${item.name}"`}
+    >
+      {/* Top-right corner: checkbox in select mode, action buttons on hover otherwise */}
+      {selectMode ? (
+        <div className="tax-card-corner" onClick={e => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            className="tbl-checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect(item.id)}
+          />
+        </div>
+      ) : hovered ? (
+        <div className="tax-card-corner" onClick={e => e.stopPropagation()}>
+          <button type="button" className="icon-btn" title="Edit" onClick={() => onEdit(item)}>
+            <i className="fa-solid fa-pen" />
+          </button>
+          <button type="button" className="icon-btn danger" title="Delete" onClick={() => onDelete(item)}>
+            <i className="fa-solid fa-trash" />
+          </button>
+        </div>
+      ) : null}
+
+      {/* Icon */}
+      <div className={`tax-card-icon${isCategory ? "" : " tax-card-icon--tag"}`}>
+        <i className={`fa-solid ${isCategory ? "fa-folder" : "fa-tag"}`} />
+      </div>
+
+      {/* Name */}
+      <div className="tax-card-name">{item.name}</div>
+
+      {/* Footer: date + product count */}
+      <div className="tax-card-meta">
+        <span className="tax-card-date">
+          <i className="fa-regular fa-calendar" style={{ fontSize: "0.7rem" }} /> {createdDate}
+        </span>
+        <span className="tax-card-count">
+          <i className="fa-solid fa-box" style={{ fontSize: "0.7rem" }} /> {productCount} Product{productCount !== 1 ? "s" : ""}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Tab section ───────────────────────────────────────────────────────────────
+function TaxTab({ table, label, hasDescription }) {
+  const [items, setItems]               = useState([]);
+  const [productCounts, setProductCounts] = useState({});
+  const [search, setSearch]             = useState("");
+  const [selectMode, setSelectMode]     = useState(false);
+  const [selected, setSelected]         = useState(new Set());
+  const [formOpen, setFormOpen]         = useState(false);
+  const [editItem, setEditItem]         = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [bulkConfirm, setBulkConfirm]   = useState(false);
+  const [productsModal, setProductsModal] = useState(null);
+  const [loading, setLoading]           = useState(false);
+
+  const field = table === "categories" ? "categories" : "tags";
+
+  const fetchData = async () => {
+    setLoading(true);
+    const { data: termData } = await supabase.from(table).select("*").order("name");
+    const terms = termData || [];
+    setItems(terms);
+
+    // Build product counts in one query
+    const { data: products } = await supabase.from("products").select(`id,${field}`);
+    const counts = {};
+    terms.forEach(t => { counts[t.id] = 0; });
+    (products || []).forEach(p => {
+      (p[field] || []).forEach(termName => {
+        const found = terms.find(t => t.name === termName);
+        if (found) counts[found.id] = (counts[found.id] || 0) + 1;
+      });
+    });
+    setProductCounts(counts);
+    setSelected(new Set());
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchData(); }, [table]); // eslint-disable-line
 
   const openAdd  = () => { setEditItem(null); setFormOpen(true); };
   const openEdit = item => { setEditItem(item); setFormOpen(true); };
 
-  const handleDelete = async id => {
-    await supabase.from(table).delete().eq("id", id);
-    setDeleteConfirm(null);
-    fetch();
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await supabase.from(table).delete().eq("id", deleteTarget.id);
+    setDeleteTarget(null);
+    fetchData();
   };
 
   const handleBulkDelete = async () => {
-    const ids = Array.from(selected);
-    await supabase.from(table).delete().in("id", ids);
+    await supabase.from(table).delete().in("id", Array.from(selected));
     setBulkConfirm(false);
+    setSelectMode(false);
     setSelected(new Set());
-    fetch();
+    fetchData();
   };
 
   const toggleSelect = id => {
@@ -265,11 +292,14 @@ function TaxTab({ table, label, icon, hasDescription }) {
     else setSelected(new Set(filtered.map(i => i.id)));
   };
 
+  const exitSelectMode = () => { setSelectMode(false); setSelected(new Set()); };
+
   const filtered = items.filter(i =>
     !search || i.name.toLowerCase().includes(search.toLowerCase()) || i.slug.toLowerCase().includes(search.toLowerCase())
   );
 
   const entityLabel = table === "categories" ? "Category" : "Tag";
+  const isCategory  = table === "categories";
 
   return (
     <div>
@@ -277,96 +307,68 @@ function TaxTab({ table, label, icon, hasDescription }) {
       <div className="products-toolbar" style={{ marginBottom: 16 }}>
         <div className="search-wrap">
           <i className="fa-solid fa-magnifying-glass" />
-          <input className="search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder={`Search ${label.toLowerCase()}...`} />
+          <input
+            className="search-input"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={`Search ${label.toLowerCase()}...`}
+          />
         </div>
 
-        {selected.size > 0 && (
-          <button type="button" className="btn btn-sm" style={{ background: "var(--danger-bg)", color: "var(--danger)", border: "1px solid var(--danger)", gap: 5 }} onClick={() => setBulkConfirm(true)}>
-            <i className="fa-solid fa-trash" /> Delete {selected.size}
-          </button>
-        )}
-
-        <button type="button" className="btn btn-primary" onClick={openAdd}>
-          <i className="fa-solid fa-plus" /> Add {entityLabel}
-        </button>
-      </div>
-
-      {/* Table */}
-      <div className="products-table-wrap" style={{ marginBottom: 0 }}>
-        <table className="products-table">
-          <thead>
-            <tr>
-              <th style={{ width: 36, paddingRight: 0 }}>
-                <input type="checkbox" className="tbl-checkbox"
-                  checked={filtered.length > 0 && selected.size === filtered.length}
-                  onChange={toggleSelectAll} />
-              </th>
-              <th>Name</th>
-              <th>Slug</th>
-              {hasDescription && <th>Description</th>}
-              <th>Created</th>
-              <th className="text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr><td colSpan={hasDescription ? 6 : 5} className="table-empty">No {label.toLowerCase()} yet.</td></tr>
+        {selectMode ? (
+          <>
+            {selected.size > 0 && (
+              <>
+                <button type="button" className="btn btn-sm btn-ghost" onClick={toggleSelectAll}>
+                  {selected.size === filtered.length ? "Deselect All" : "Select All"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  style={{ background: "var(--danger-bg)", color: "var(--danger)", border: "1px solid var(--danger)", gap: 5 }}
+                  onClick={() => setBulkConfirm(true)}
+                >
+                  <i className="fa-solid fa-trash" /> Delete {selected.size}
+                </button>
+              </>
             )}
-            {filtered.map(item => (
-              <tr key={item.id} className={selected.has(item.id) ? "row-selected" : ""}>
-                <td style={{ paddingRight: 0 }}>
-                  <input type="checkbox" className="tbl-checkbox" checked={selected.has(item.id)} onChange={() => toggleSelect(item.id)} />
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    className="product-name-link"
-                    onClick={() => setProductsModal(item.name)}
-                    style={{ cursor: "pointer", background: "none", border: "none", padding: 0 }}
-                  >
-                    {item.name}
-                  </button>
-                </td>
-                <td className="tbl-date" style={{ fontFamily: "monospace" }}>{item.slug}</td>
-                {hasDescription && (
-                  <td style={{ color: "var(--text-2)", fontSize: "0.82rem", maxWidth: 220 }}>
-                    {item.description || <span style={{ color: "var(--text-3)" }}>-</span>}
-                  </td>
-                )}
-                <td className="tbl-date">{new Date(item.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}</td>
-                <td style={{ textAlign: "right" }}>
-                  <div className="table-actions">
-                    {deleteConfirm === item.id ? (
-                      <>
-                        <button className="btn btn-danger btn-sm" onClick={() => handleDelete(item.id)}>Yes</button>
-                        <button className="btn btn-ghost btn-sm" onClick={() => setDeleteConfirm(null)}>No</button>
-                      </>
-                    ) : (
-                      <>
-                        <button type="button" className="icon-btn" title="Edit" onClick={() => openEdit(item)}>
-                          <i className="fa-solid fa-pen" />
-                        </button>
-                        <button type="button" className="icon-btn danger" title="Delete" onClick={() => setDeleteConfirm(item.id)}>
-                          <i className="fa-solid fa-trash" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }} onClick={exitSelectMode}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectMode(true)}>
+              <i className="fa-solid fa-check-square" /> Select
+            </button>
+            <button type="button" className="btn btn-primary" style={{ marginLeft: "auto" }} onClick={openAdd}>
+              <i className="fa-solid fa-plus" /> Add {entityLabel}
+            </button>
+          </>
+        )}
       </div>
 
-      {/* Card grid view below table */}
-      {filtered.length > 0 && (
-        <div className="term-cards-grid" style={{ marginTop: 20 }}>
-          {filtered.map(item =>
-            table === "categories"
-              ? <TermCard key={item.id} item={item} onEdit={openEdit} onClick={name => setProductsModal(name)} />
-              : <TagCard  key={item.id} item={item} onEdit={openEdit} onClick={name => setProductsModal(name)} />
-          )}
+      {/* Grid */}
+      {loading ? (
+        <div className="table-loading"><i className="fa-solid fa-circle-notch fa-spin" /> Loading...</div>
+      ) : filtered.length === 0 ? (
+        <div className="empty-state">No {label.toLowerCase()} yet.</div>
+      ) : (
+        <div className="tax-grid">
+          {filtered.map(item => (
+            <TaxCard
+              key={item.id}
+              item={item}
+              isCategory={isCategory}
+              productCount={productCounts[item.id] ?? 0}
+              selectMode={selectMode}
+              selected={selected.has(item.id)}
+              onToggleSelect={toggleSelect}
+              onEdit={openEdit}
+              onDelete={setDeleteTarget}
+              onViewProducts={name => setProductsModal(name)}
+            />
+          ))}
         </div>
       )}
 
@@ -377,7 +379,7 @@ function TaxTab({ table, label, icon, hasDescription }) {
         editItem={editItem}
         table={table}
         hasDescription={hasDescription}
-        onSaved={fetch}
+        onSaved={fetchData}
       />
 
       {/* Products modal */}
@@ -385,8 +387,29 @@ function TaxTab({ table, label, icon, hasDescription }) {
         open={!!productsModal}
         onClose={() => setProductsModal(null)}
         term={productsModal}
-        field={table === "categories" ? "categories" : "tags"}
+        field={field}
       />
+
+      {/* Single delete confirm */}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Delete {entityLabel}?</h2>
+              <button className="modal-close-btn" onClick={() => setDeleteTarget(null)}></button>
+            </div>
+            <div className="modal-body">
+              <p className="confirm-msg">
+                Delete "<strong>{deleteTarget.name}</strong>"? This cannot be undone.
+              </p>
+              <div className="confirm-actions">
+                <button type="button" className="btn btn-ghost" onClick={() => setDeleteTarget(null)}>Cancel</button>
+                <button type="button" className="btn btn-danger" onClick={handleDelete}>Delete</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bulk delete confirm */}
       {bulkConfirm && (
@@ -410,13 +433,12 @@ function TaxTab({ table, label, icon, hasDescription }) {
   );
 }
 
-// - Main -------------------------------
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function Taxonomy() {
   const [tab, setTab] = useState("categories");
 
   return (
     <div>
-      {/* Page header */}
       <div className="page-header" style={{ marginBottom: 20 }}>
         <h1 className="page-title">
           <i className="fa-solid fa-tags" style={{ marginRight: "0.5rem", color: "var(--brand)" }} />
@@ -424,7 +446,6 @@ export default function Taxonomy() {
         </h1>
       </div>
 
-      {/* Tabs */}
       <div className="tax-tabs">
         <button
           type="button"
@@ -444,18 +465,12 @@ export default function Taxonomy() {
 
       <div style={{ marginTop: 20 }}>
         {tab === "categories" && (
-          <TaxTab table="categories" label="Categories" icon="fa-solid fa-folder" hasDescription />
+          <TaxTab table="categories" label="Categories" hasDescription />
         )}
         {tab === "tags" && (
-          <TaxTab table="tags" label="Tags" icon="fa-solid fa-tag" hasDescription={false} />
+          <TaxTab table="tags" label="Tags" hasDescription={false} />
         )}
       </div>
     </div>
   );
 }
-
-
-
-
-
-

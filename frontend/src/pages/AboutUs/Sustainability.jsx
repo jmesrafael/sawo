@@ -1,9 +1,9 @@
 ﻿// Sustainability.jsx
 
 import React, { useEffect } from "react";
-import heroBg from "assets/About/Sustainability-hero.webp";
-import practicesBg from "assets/About/Sustainability.webp";
-import menuPaths from "menuPaths";
+import heroBg from "../../assets/About/Sustainability-hero.webp";
+import practicesBg from "../../assets/About/Sustainability.webp";
+import menuPaths from "../../menuPaths";
 import { Link } from "react-router-dom";
 
 const Sustainability = () => {

@@ -1,5 +1,5 @@
 /* eslint-disable jsx-a11y/anchor-is-valid */
-import sLogo from "assets/SAWO-logo.webp";
+import sLogo from "../../assets/SAWO-logo.webp";
 
 export default function Footer() {
   return (

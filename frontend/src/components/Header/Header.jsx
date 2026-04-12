@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
-import sLogo from "assets/SAWO-logo.webp";
-import menuPaths from "menuPaths";
+import sLogo from "../../assets/SAWO-logo.webp";
+import menuPaths from "../../menuPaths";
 
 export default function Header() {
   const location = useLocation();
@@ -63,6 +63,7 @@ export default function Header() {
       path: menuPaths.support.parent,
       submenu: [
         { name: "Frequently Asked Questions", path: menuPaths.support.faq },
+        { name: "Sauna Calculator", path: menuPaths.support.saunaCalculator },
         { name: "User Manuals", path: menuPaths.support.manuals },
         { name: "Product Catalogue", path: menuPaths.support.catalogue },
       ],

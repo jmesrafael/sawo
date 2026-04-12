@@ -180,7 +180,7 @@ export default function Users() {
           </button>
         )}
 
-        <button type="button" className="btn btn-primary" onClick={openAdd}>
+        <button type="button" className="btn btn-primary" style={{ marginLeft: "auto" }} onClick={openAdd}>
           <i className="fa-solid fa-plus" /> Add User
         </button>
       </div>

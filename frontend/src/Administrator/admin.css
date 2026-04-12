@@ -1265,95 +1265,101 @@ body {
 .tax-tab-btn:hover { color: var(--text-2); }
 .tax-tab-btn.active { color: var(--brand); border-bottom-color: var(--brand); }
 
-/* ── Term card grid (categories & tags) ──────────────────────────────── */
-.term-cards-grid {
+/* ── Taxonomy grid (categories & tags) ───────────────────────────────── */
+.tax-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
 }
 
-.term-card {
+.tax-grid-card {
   position: relative;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   border-radius: var(--r);
-  padding: 14px 14px 12px;
+  padding: 16px 14px 13px;
   cursor: pointer;
-  transition: box-shadow var(--t), border-color var(--t);
+  transition: box-shadow var(--t), border-color var(--t), background var(--t);
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
   overflow: hidden;
+  min-height: 120px;
 }
-.term-card:hover { box-shadow: var(--shadow); border-color: var(--brand-light); }
-.term-card-tag { background: var(--surface-2); }
+.tax-grid-card:hover { box-shadow: var(--shadow); border-color: var(--brand-light); }
+.tax-grid-card--tag  { background: var(--surface-2); }
+.tax-grid-card--selected {
+  border-color: var(--brand);
+  background: var(--brand-muted);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 20%, transparent);
+}
+.tax-grid-card--selectable { cursor: default; }
 
-.term-card-edit-btn {
+/* top-right corner: action buttons or checkbox */
+.tax-card-corner {
   position: absolute;
   top: 8px;
   right: 8px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text-3);
-  cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 0.72rem;
-  transition: all var(--t);
+  gap: 4px;
   animation: fadeIn 0.1s ease;
   z-index: 2;
 }
-.term-card-edit-btn:hover { background: var(--brand); color: #fff; border-color: var(--brand); }
 
-.term-card-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+.tax-card-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   background: var(--brand-muted);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   margin-bottom: 2px;
+  font-size: 1rem;
+  color: var(--brand);
 }
-.term-card-icon-tag { background: var(--surface-2); }
+.tax-card-icon--tag {
+  background: var(--surface-2);
+  color: var(--brand-dark);
+  font-size: 0.9rem;
+}
 
-.term-card-name {
+.tax-card-name {
   font-family: var(--font);
   font-weight: 600;
   font-size: 13px;
   color: rgb(20,22,23);
-  line-height: 1.3;
+  line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding-right: 52px; /* space for corner buttons */
 }
-[data-theme="dark"] .term-card-name { color: rgba(255,255,255,0.92); }
+[data-theme="dark"] .tax-card-name { color: rgba(255,255,255,0.92); }
 
-.term-card-desc {
+.tax-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.tax-card-date,
+.tax-card-count {
   font-family: var(--font);
-  font-weight: 400;
-  font-size: 12px;
-  color: rgb(90,85,80);
-  line-height: 1.4;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-[data-theme="dark"] .term-card-desc { color: rgba(255,255,255,0.45); }
-
-.term-card-slug {
-  font-family: monospace;
   font-size: 11px;
   color: var(--text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   white-space: nowrap;
+}
+.tax-card-count {
+  color: var(--text-2);
+  font-weight: 500;
 }
 
 /* ── Login page ──────────────────────────────────────────────────────── */

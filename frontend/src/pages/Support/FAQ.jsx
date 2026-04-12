@@ -1,9 +1,11 @@
-﻿import React, { useState, useRef, useEffect } from "react";
-import heroBg from "assets/Support/FAQ/hero.webp";
-import faq1 from "assets/Support/FAQ/faq1.webp";
-import faq2 from "assets/Support/FAQ/faq2.webp";
-import faq3 from "assets/Support/FAQ/faq3.webp";
-import faq4 from "assets/Support/FAQ/faq4.webp";
+﻿//pages/Support/FAQ.jsx
+
+import React, { useState, useRef, useEffect } from "react";
+import heroBg from "../../assets/Support/FAQ/hero.webp";
+import faq1 from "../../assets/Support/FAQ/faq1.webp";
+import faq2 from "../../assets/Support/FAQ/faq2.webp";
+import faq3 from "../../assets/Support/FAQ/faq3.webp";
+import faq4 from "../../assets/Support/FAQ/faq4.webp";
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
 

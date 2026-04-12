@@ -32,6 +32,7 @@ const menuPaths = {
   support: {
     parent: "/support",
     faq: "/support/faq",
+    saunaCalculator: "/support/sauna-calculator",
     manuals: "/support/manuals",
     catalogue: "/support/catalogue",
   },

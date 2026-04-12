@@ -1,20 +1,20 @@
 // Steam.jsx
 
 import React from "react";
-import heroBg from "assets/Steam/hero.webp";
-import stnS from "assets/Steam/Steam Generators/STN-S.webp";
-import stnW from "assets/Steam/Steam Generators/STN-W.webp";
-import stn from "assets/Steam/Steam Generators/STN.webp";
-import ste from "assets/Steam/Steam Generators/STE.webp";
-import steControl from "assets/Steam/STE-INFACE-V2-150x150.webp";
-import stpV2 from "assets/Steam/STP-INFACE-V2-300x330.webp";
-import stpSST from "assets/Steam/STP-INFACE-SST-310x179.webp";
-import steamDoor from "assets/Steam/steam-door.webp";
-import installStand from "assets/Steam/Installation-stand.webp";
-import aromaPump from "assets/Steam/aroma-pump.webp";
-import demandButton from "assets/Steam/demand-button.webp";
-import venturiL from "assets/Steam/venturi-pipe-L-shape.webp";
-import venturiStraight from "assets/Steam/venturi-pipe-straight.webp";
+import heroBg from "../../assets/Steam/hero.webp";
+import stnS from "../../assets/Steam/Steam Generators/STN-S.webp";
+import stnW from "../../assets/Steam/Steam Generators/STN-W.webp";
+import stn from "../../assets/Steam/Steam Generators/STN.webp";
+import ste from "../../assets/Steam/Steam Generators/STE.webp";
+import steControl from "../../assets/Steam/STE-INFACE-V2-150x150.webp";
+import stpV2 from "../../assets/Steam/STP-INFACE-V2-300x330.webp";
+import stpSST from "../../assets/Steam/STP-INFACE-SST-310x179.webp";
+import steamDoor from "../../assets/Steam/steam-door.webp";
+import installStand from "../../assets/Steam/Installation-stand.webp";
+import aromaPump from "../../assets/Steam/aroma-pump.webp";
+import demandButton from "../../assets/Steam/demand-button.webp";
+import venturiL from "../../assets/Steam/venturi-pipe-L-shape.webp";
+import venturiStraight from "../../assets/Steam/venturi-pipe-straight.webp";
 
 const generators = [
   {

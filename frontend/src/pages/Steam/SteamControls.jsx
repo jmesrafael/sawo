@@ -1,10 +1,10 @@
 ﻿// SteamControls.jsx
 
 import React from "react";
-import heroBg from "assets/Steam/controls-hero.webp";
-import stpV2 from "assets/Steam/STP-INFACE-V2-300x330.webp";
-import stpSST from "assets/Steam/STP-INFACE-SST-310x179.webp";
-import steControl from "assets/Steam/STE-INFACE-V2-150x150.webp";
+import heroBg from "../../assets/Steam/controls-hero.webp";
+import stpV2 from "../../assets/Steam/STP-INFACE-V2-300x330.webp";
+import stpSST from "../../assets/Steam/STP-INFACE-SST-310x179.webp";
+import steControl from "../../assets/Steam/STE-INFACE-V2-150x150.webp";
 
 const controls = [
   {

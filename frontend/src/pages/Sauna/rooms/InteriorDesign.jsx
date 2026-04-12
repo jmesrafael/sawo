@@ -1,10 +1,10 @@
 // InteriorDesign.jsx
 
 import React from "react";
-import heroBg from "assets/Sauna/Sauna Rooms/Interior Designs/hero.webp";
-import classicBench from "assets/Sauna/Sauna Rooms/Interior Designs/classic-bench.webp";
-import waveBench from "assets/Sauna/Sauna Rooms/Interior Designs/wave-bench.webp";
-import pianoBench from "assets/Sauna/Sauna Rooms/Interior Designs/piano-bench.webp";
+import heroBg from "../../../assets/Sauna/Sauna Rooms/Interior Designs/hero.webp";
+import classicBench from "../../../assets/Sauna/Sauna Rooms/Interior Designs/classic-bench.webp";
+import waveBench from "../../../assets/Sauna/Sauna Rooms/Interior Designs/wave-bench.webp";
+import pianoBench from "../../../assets/Sauna/Sauna Rooms/Interior Designs/piano-bench.webp";
 
 const InteriorDesign = () => {
   const designs = [

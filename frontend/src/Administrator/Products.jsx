@@ -941,7 +941,7 @@ export default function Products({ currentUser }) {
           </button>
         )}
 
-        <Btn icon="fa-plus" label="New Product" onClick={openCreate} />
+        <Btn icon="fa-plus" label="New Product" onClick={openCreate} style={{ marginLeft: "auto" }} />
       </div>
 
       {/* Grid View */}

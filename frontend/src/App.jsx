@@ -33,6 +33,7 @@ import SteamGenerators  from "./pages/Steam/SteamGenerators";
 import SteamControls    from "./pages/Steam/SteamControls";
 import SteamAccessories from "./pages/Steam/SteamAccessories";
 import Support          from "./pages/Support/Support";
+import SaunaCalculator  from "./pages/Support/SaunaCalculator";
 import FAQ              from "./pages/Support/FAQ";
 import UserManuals      from "./pages/Support/UserManuals";
 import ProductCatalogue from "./pages/Support/ProductCatalogue";
@@ -83,6 +84,7 @@ export default function App() {
                 <Route path={menuPaths.steam.controls}          element={<SteamControls />} />
                 <Route path={menuPaths.steam.accessories}       element={<SteamAccessories />} />
                 <Route path={menuPaths.support.faq}             element={<FAQ />} />
+                <Route path={menuPaths.support.saunaCalculator} element={<SaunaCalculator />} />
                 <Route path={menuPaths.support.manuals}         element={<UserManuals />} />
                 <Route path={menuPaths.support.catalogue}       element={<ProductCatalogue />} />
 

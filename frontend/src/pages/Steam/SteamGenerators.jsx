@@ -1,11 +1,11 @@
 // SteamGenerators.jsx
 
 import React from "react";
-import heroImg from "assets/Steam/Steam Generators/STN-S.webp";
-import stnS from "assets/Steam/Steam Generators/STN-S.webp";
-import stnW from "assets/Steam/Steam Generators/STN-W.webp";
-import stn from "assets/Steam/Steam Generators/STN.webp";
-import ste from "assets/Steam/Steam Generators/STE.webp";
+import heroImg from "../../assets/Steam/Steam Generators/STN-S.webp";
+import stnS from "../../assets/Steam/Steam Generators/STN-S.webp";
+import stnW from "../../assets/Steam/Steam Generators/STN-W.webp";
+import stn from "../../assets/Steam/Steam Generators/STN.webp";
+import ste from "../../assets/Steam/Steam Generators/STE.webp";
 
 const generators = [
   {

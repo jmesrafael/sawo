@@ -1,13 +1,13 @@
 ﻿// Careers.jsx
 
 import React, { useEffect } from "react";
-import heroBg from "assets/Careers/Hero.webp";
-import joinImg from "assets/Careers/Join-img.webp";
-import heaterImg from "assets/Careers/Heater.webp";
-import img1 from "assets/Careers/img1.webp";
-import img2 from "assets/Careers/img2.webp";
-import img3 from "assets/Careers/img3.webp";
-import img4 from "assets/Careers/img4.webp";
+import heroBg from "../../assets/Careers/Hero.webp";
+import joinImg from "../../assets/Careers/Join-img.webp";
+import heaterImg from "../../assets/Careers/Heater.webp";
+import img1 from "../../assets/Careers/img1.webp";
+import img2 from "../../assets/Careers/img2.webp";
+import img3 from "../../assets/Careers/img3.webp";
+import img4 from "../../assets/Careers/img4.webp";
 
 const Careers = () => {
   useEffect(() => {

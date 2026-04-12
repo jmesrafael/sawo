@@ -1,14 +1,14 @@
 ﻿// SteamAccessories.jsx
 
 import React from "react";
-import heroBg from "assets/Steam/hero.webp";
-import steamDoor from "assets/Steam/steam-door.webp";
-import aromaPump from "assets/Steam/aroma-pump.webp";
-import installStand from "assets/Steam/Installation-stand.webp";
-import venturiL from "assets/Steam/venturi-pipe-L-shape.webp";
-import venturiStraight from "assets/Steam/venturi-pipe-straight.webp";
-import demandButton from "assets/Steam/demand-button.webp";
-import steamHeadCover from "assets/Steam/steam-head-cover.webp";
+import heroBg from "../../assets/Steam/hero.webp";
+import steamDoor from "../../assets/Steam/steam-door.webp";
+import aromaPump from "../../assets/Steam/aroma-pump.webp";
+import installStand from "../../assets/Steam/Installation-stand.webp";
+import venturiL from "../../assets/Steam/venturi-pipe-L-shape.webp";
+import venturiStraight from "../../assets/Steam/venturi-pipe-straight.webp";
+import demandButton from "../../assets/Steam/demand-button.webp";
+import steamHeadCover from "../../assets/Steam/steam-head-cover.webp";
 
 const accessories = [
   { img: steamDoor,       title: "Steam Door",             desc: "A steam door is essential for keeping steam in and preventing excess moisture from escaping, ensuring an optimal steam room experience." },
