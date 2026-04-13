@@ -162,17 +162,19 @@ export default function Users() {
           <input className="search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search username, email..." />
         </div>
 
-        <select className="filter-select" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
-          <option value="">All Roles</option>
-          <option value="admin">admin</option>
-          <option value="superadmin">superadmin</option>
-          <option value="editor">editor</option>
-        </select>
+        <div className="filter-group">
+          <select className="filter-select" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
+            <option value="">All Roles</option>
+            <option value="admin">admin</option>
+            <option value="superadmin">superadmin</option>
+            <option value="editor">editor</option>
+          </select>
 
-        <select className="filter-select" value={sortDir} onChange={e => setSortDir(e.target.value)}>
-          <option value="desc">Newest first</option>
-          <option value="asc">Oldest first</option>
-        </select>
+          <select className="filter-select" value={sortDir} onChange={e => setSortDir(e.target.value)}>
+            <option value="desc">Newest first</option>
+            <option value="asc">Oldest first</option>
+          </select>
+        </div>
 
         {selected.size > 0 && (
           <button type="button" className="btn btn-sm" style={{ background: "var(--danger-bg)", color: "var(--danger)", border: "1px solid var(--danger)", gap: 5 }} onClick={() => setBulkConfirm(true)}>

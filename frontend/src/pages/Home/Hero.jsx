@@ -92,7 +92,7 @@ const Hero = () => {
           textShadow: "4px 6px 7px rgba(0,0,0,0.5)",
         }}
       >
-        Experience . . . .
+        Experience . . .
       </h1>
 
       <div className="sr-only">

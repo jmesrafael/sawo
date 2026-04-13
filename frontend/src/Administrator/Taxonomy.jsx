@@ -304,7 +304,7 @@ function TaxTab({ table, label, hasDescription }) {
   return (
     <div>
       {/* Toolbar */}
-      <div className="products-toolbar" style={{ marginBottom: 16 }}>
+      <div className="products-toolbar">
         <div className="search-wrap">
           <i className="fa-solid fa-magnifying-glass" />
           <input
@@ -315,37 +315,40 @@ function TaxTab({ table, label, hasDescription }) {
           />
         </div>
 
-        {selectMode ? (
-          <>
-            {selected.size > 0 && (
-              <>
-                <button type="button" className="btn btn-sm btn-ghost" onClick={toggleSelectAll}>
-                  {selected.size === filtered.length ? "Deselect All" : "Select All"}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  style={{ background: "var(--danger-bg)", color: "var(--danger)", border: "1px solid var(--danger)", gap: 5 }}
-                  onClick={() => setBulkConfirm(true)}
-                >
-                  <i className="fa-solid fa-trash" /> Delete {selected.size}
-                </button>
-              </>
-            )}
-            <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }} onClick={exitSelectMode}>
-              Cancel
-            </button>
-          </>
-        ) : (
-          <>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectMode(true)}>
-              <i className="fa-solid fa-check-square" /> Select
-            </button>
-            <button type="button" className="btn btn-primary" style={{ marginLeft: "auto" }} onClick={openAdd}>
-              <i className="fa-solid fa-plus" /> Add {entityLabel}
-            </button>
-          </>
-        )}
+        <div className="filter-group">
+          {selectMode ? (
+            <>
+              {selected.size > 0 && (
+                <>
+                  <button type="button" className="btn btn-sm btn-ghost" onClick={toggleSelectAll}>
+                    {selected.size === filtered.length ? "Deselect All" : "Select All"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    style={{ background: "var(--danger-bg)", color: "var(--danger)", border: "1px solid var(--danger)", gap: 5 }}
+                    onClick={() => setBulkConfirm(true)}
+                  >
+                    <i className="fa-solid fa-trash" /> Delete {selected.size}
+                  </button>
+                </>
+              )}
+              <button type="button" className="btn btn-ghost btn-sm" onClick={exitSelectMode}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectMode(true)}>
+                <i className="fa-solid fa-check-square" /> Select
+              </button>
+            </>
+          )}
+        </div>
+
+        <button type="button" className="btn btn-primary" style={{ marginLeft: "auto" }} onClick={openAdd}>
+          <i className="fa-solid fa-plus" /> Add {entityLabel}
+        </button>
       </div>
 
       {/* Grid */}

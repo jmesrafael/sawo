@@ -1,9 +1,11 @@
 // src/pages/ProductPage.jsx
-// Restructured layout:
-// Section 1 (2-col): Left = Carousel + Cat/Tags | Right = Brand, Name, Short Desc, Features (vertically centered)
-// Section 2 (1-col): Full Description
-// Section 3 (2-col): Left = Diagrams | Right = PDF Resources
-// Section 4: Related Products
+// Changes:
+// - Right column: top-aligned (not centered)
+// - Removed categories/tags display from left column
+// - Removed "Click to zoom" overlay on carousel images
+// - Spec images moved to Section 1 right side, above Resources (compact, no bg, no zoom label, still clickable)
+// - Related Products: removed short_description
+// - Section 2 no longer shows spec images (they're now in Section 1)
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
@@ -187,8 +189,8 @@ function Carousel({ images, thumbnail, onImageClick }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{
-        position: "relative", borderRadius: 14, overflow: "hidden",
-        background: "#faf7f4", border: "1px solid #edddd0",
+        position: "relative", borderRadius: 0, overflow: "visible",
+        background: "transparent", border: "none",
         aspectRatio: "1/1", display: "flex", alignItems: "center", justifyContent: "center",
         cursor: "zoom-in",
       }}
@@ -197,37 +199,28 @@ function Carousel({ images, thumbnail, onImageClick }) {
         {!err[idx] ? (
           <img key={idx} src={all[idx]} alt=""
             onError={() => setErr(e => ({ ...e, [idx]: true }))}
-            style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", padding: 24, animation: "ppFadeIn 0.25s ease" }}
+            style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", padding: 0, animation: "ppFadeIn 0.25s ease", width: "100%", height: "100%" }}
           />
         ) : (
           <i className="fa-regular fa-image" style={{ fontSize: "2.5rem", color: "#d5b99a" }} />
         )}
 
-        <div style={{
-          position: "absolute", bottom: 10, right: 10,
-          background: "rgba(44,26,14,0.45)", color: "#fff",
-          padding: "3px 9px", borderRadius: 6,
-          fontFamily: "'Montserrat',sans-serif", fontSize: "0.6rem", fontWeight: 600,
-          display: "flex", alignItems: "center", gap: 5, pointerEvents: "none",
-        }}>
-          <i className="fa-solid fa-magnifying-glass-plus" style={{ fontSize: "0.65rem" }} />
-          Click to zoom
-        </div>
+        {/* REMOVED: "Click to zoom" overlay */}
 
         {all.length > 1 && (
           <>
             {[{ fn: prev, side: "left", icon: "fa-chevron-left" }, { fn: next, side: "right", icon: "fa-chevron-right" }].map(({ fn, side, icon }) => (
               <button key={side} onClick={e => { e.stopPropagation(); fn(); }} style={{
                 position: "absolute", [side]: 10, top: "50%", transform: "translateY(-50%)",
-                background: "rgba(255,255,255,0.92)", border: "1px solid #edddd0",
+                background: "transparent", border: "none",
                 borderRadius: "50%", width: 34, height: 34, cursor: "pointer",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: "0 2px 8px rgba(139,94,60,0.12)", transition: "all 0.2s", color: "#8b5e3c",
+                boxShadow: "none", transition: "all 0.2s", color: "#a67853",
               }}
-                onMouseEnter={e => { e.currentTarget.style.background = "#8b5e3c"; e.currentTarget.style.color = "#fff"; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.92)"; e.currentTarget.style.color = "#8b5e3c"; }}
+                onMouseEnter={e => { e.currentTarget.style.color = "#8b5e3c"; e.currentTarget.style.transform = "translateY(-50%) scale(1.15)"; }}
+                onMouseLeave={e => { e.currentTarget.style.color = "#a67853"; e.currentTarget.style.transform = "translateY(-50%)"; }}
               >
-                <i className={`fa-solid ${icon}`} style={{ fontSize: "0.7rem" }} />
+                <i className={`fa-solid ${icon}`} style={{ fontSize: "1.2rem", fontWeight: "bold" }} />
               </button>
             ))}
             <div style={{ position: "absolute", bottom: 10, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 5 }}>
@@ -269,77 +262,71 @@ function Carousel({ images, thumbnail, onImageClick }) {
   );
 }
 
-/* ── Diagram Carousel ─────────────────────────────────────────────── */
-function DiagramCarousel({ images, onImageClick }) {
+/* ── Compact Spec Image Strip (for Section 1 right column) ────────── */
+function CompactSpecImages({ images, onImageClick }) {
   const [idx, setIdx] = useState(0);
+  if (!images || !images.length) return null;
   const single = images.length === 1;
-  if (!images.length) return null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{
-        position: "relative", borderRadius: 10, overflow: "hidden",
-        background: "#faf7f4", border: "1px solid #edddd0",
+        position: "relative",
         display: "flex", alignItems: "center", justifyContent: "center",
-        minHeight: 220, cursor: "zoom-in",
+        cursor: "pointer",
+        minHeight: 100,
       }} onClick={() => onImageClick(images, idx)}>
         <img
-          key={idx} src={images[idx]} alt=""
+          key={idx}
+          src={images[idx]}
+          alt=""
           onError={e => { e.currentTarget.style.display = "none"; }}
-          style={{ maxWidth: "100%", maxHeight: 320, objectFit: "contain", padding: 16, animation: "ppFadeIn 0.2s ease", display: "block" }}
+          style={{
+            width: "100%", objectFit: "contain",
+            display: "block", animation: "ppFadeIn 0.2s ease",
+          }}
         />
-        <div style={{
-          position: "absolute", bottom: 8, right: 8,
-          background: "rgba(44,26,14,0.45)", color: "#fff",
-          padding: "3px 9px", borderRadius: 6,
-          fontFamily: "'Montserrat',sans-serif", fontSize: "0.6rem", fontWeight: 600,
-          display: "flex", alignItems: "center", gap: 5, pointerEvents: "none",
-        }}>
-          <i className="fa-solid fa-magnifying-glass-plus" style={{ fontSize: "0.65rem" }} /> Click to zoom
-        </div>
-        {!single && (
-          <span style={{
-            position: "absolute", top: 8, right: 8,
-            background: "rgba(44,26,14,0.55)", color: "#fff",
-            fontSize: "0.63rem", fontFamily: "'Montserrat',sans-serif",
-            fontWeight: 600, padding: "2px 8px", borderRadius: 20, pointerEvents: "none",
-          }}>
-            {idx + 1} / {images.length}
-          </span>
-        )}
         {!single && (
           <>
+            <span style={{
+              position: "absolute", top: 4, right: 4,
+              background: "rgba(44,26,14,0.45)", color: "#fff",
+              fontSize: "0.6rem", fontFamily: "'Montserrat',sans-serif",
+              fontWeight: 600, padding: "2px 7px", borderRadius: 20, pointerEvents: "none",
+            }}>
+              {idx + 1} / {images.length}
+            </span>
             {[
               { fn: () => setIdx(i => (i - 1 + images.length) % images.length), side: "left", icon: "fa-chevron-left" },
               { fn: () => setIdx(i => (i + 1) % images.length), side: "right", icon: "fa-chevron-right" },
             ].map(({ fn, side, icon }) => (
               <button key={side} onClick={e => { e.stopPropagation(); fn(); }} style={{
-                position: "absolute", [side]: 8, top: "50%", transform: "translateY(-50%)",
-                background: "rgba(255,255,255,0.92)", border: "1px solid #edddd0",
-                borderRadius: "50%", width: 30, height: 30, cursor: "pointer",
+                position: "absolute", [side]: 2, top: "50%", transform: "translateY(-50%)",
+                background: "transparent", border: "none",
+                borderRadius: "50%", width: 26, height: 26, cursor: "pointer",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                color: "#8b5e3c", fontSize: "0.65rem",
-                boxShadow: "0 2px 6px rgba(139,94,60,0.1)", transition: "all 0.2s",
+                color: "#a67853", transition: "all 0.2s",
               }}
-                onMouseEnter={e => { e.currentTarget.style.background = "#8b5e3c"; e.currentTarget.style.color = "#fff"; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.92)"; e.currentTarget.style.color = "#8b5e3c"; }}
+                onMouseEnter={e => { e.currentTarget.style.color = "#8b5e3c"; e.currentTarget.style.transform = "translateY(-50%) scale(1.2)"; }}
+                onMouseLeave={e => { e.currentTarget.style.color = "#a67853"; e.currentTarget.style.transform = "translateY(-50%)"; }}
               >
-                <i className={`fa-solid ${icon}`} />
+                <i className={`fa-solid ${icon}`} style={{ fontSize: "0.9rem" }} />
               </button>
             ))}
           </>
         )}
       </div>
+
       {!single && (
-        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
+        <div style={{ display: "flex", gap: 5, overflowX: "auto", paddingBottom: 2 }}>
           {images.map((url, i) => (
             <button key={i} onClick={() => setIdx(i)}
               style={{
-                flexShrink: 0, width: 52, height: 52, borderRadius: 7, overflow: "hidden",
+                flexShrink: 0, width: 40, height: 40, borderRadius: 6, overflow: "hidden",
                 border: `2px solid ${i === idx ? "#a67853" : "#edddd0"}`,
-                background: "#faf7f4", cursor: "pointer", padding: 0, transition: "border-color 0.18s",
+                background: "transparent", cursor: "pointer", padding: 0, transition: "border-color 0.18s",
               }}>
-              <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 3 }} />
+              <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 2 }} />
             </button>
           ))}
         </div>
@@ -398,8 +385,8 @@ function SectionLabel({ icon, text }) {
   return (
     <h3 style={{
       fontFamily: "'Montserrat',sans-serif", fontWeight: 700,
-      fontSize: "0.67rem", letterSpacing: "0.12em", textTransform: "uppercase",
-      color: "#8b5e3c", margin: "0 0 12px",
+      fontSize: "0.62rem", letterSpacing: "0.12em", textTransform: "uppercase",
+      color: "#8b5e3c", margin: "0 0 10px",
       display: "flex", alignItems: "center", gap: 6,
     }}>
       {icon && <i className={icon} style={{ opacity: 0.75 }} />}
@@ -428,7 +415,7 @@ function RelatedProducts({ currentSlug, categories }) {
       try {
         const { data } = await supabase
           .from("products")
-          .select("id,name,slug,thumbnail,categories,short_description")
+          .select("id,name,slug,thumbnail,categories")
           .eq("status", "published")
           .eq("visible", true)
           .neq("slug", currentSlug)
@@ -518,16 +505,7 @@ function RelatedProducts({ currentSlug, categories }) {
                   }}>
                     {p.name}
                   </p>
-                  {p.short_description && (
-                    <p style={{
-                      fontFamily: "'Montserrat',sans-serif", fontSize: "0.73rem",
-                      color: "#7a5c45", margin: 0, lineHeight: 1.5,
-                      display: "-webkit-box", WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical", overflow: "hidden",
-                    }}>
-                      {p.short_description}
-                    </p>
-                  )}
+                  {/* short_description removed */}
                   <div style={{ marginTop: "auto", paddingTop: 10 }}>
                     <span style={{
                       fontFamily: "'Montserrat',sans-serif", fontSize: "0.72rem",
@@ -646,16 +624,70 @@ export default function ProductPage() {
   const hasFeatures  = (product.features || []).length > 0;
   const hasSpec      = (product.spec_images || []).length > 0;
   const hasSpecTable = product.spec_table?.headers?.length > 0;
-  const hasCats      = (product.categories || []).length > 0;
-  const hasTags      = (product.tags || []).length > 0;
   const hasResources = files.length > 0;
-  const hasSection3  = hasSpec || hasSpecTable || hasResources;
+  const hasSection2  = hasDesc || hasSpecTable;
 
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap');
         @keyframes ppFadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 12px 0;
+          font-family: 'Montserrat', sans-serif;
+          font-size: 0.78rem;
+          background-color: #fff;
+        }
+
+        table th {
+          background-color: #f0e8df;
+          color: #5a4030;
+          font-weight: 600;
+          padding: 8px 10px;
+          text-align: center;
+          border-bottom: 1px solid #ddc9b4;
+          font-size: 0.68rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          line-height: 1.2;
+          white-space: normal;
+          word-break: break-word;
+        }
+
+        table td {
+          padding: 8px 10px;
+          color: #5a4030;
+          border-bottom: 1px solid #edddd0;
+          background-color: transparent;
+          text-align: center;
+          font-size: 0.77rem;
+        }
+
+        table td:first-child {
+          white-space: nowrap;
+          text-align: center;
+          font-weight: 500;
+        }
+
+        table tbody tr:nth-child(odd) {
+          background-color: #fdfaf7;
+        }
+
+        table tbody tr:hover {
+          background-color: #f5ede3;
+        }
+
+        table tbody tr:last-child td {
+          border-bottom: none;
+        }
+
+        @media(max-width: 768px) {
+          table { font-size: 0.72rem; }
+          table th, table td { padding: 7px 8px; }
+        }
 
         @media(max-width:900px){
           .pp-s1-grid { grid-template-columns: 1fr !important; gap: 28px !important; }
@@ -675,52 +707,27 @@ export default function ProductPage() {
         {/* ── SECTION 1: Images + Info ─────────────────────────────── */}
         <div
           className="pp-outer"
-          style={{ maxWidth: 1140, margin: "0 auto", padding: "40px 32px 52px", paddingTop: 160 }}
+          style={{ maxWidth: 1140, margin: "0 auto", padding: "10px 8px 13px", paddingTop: 160 }}
         >
           <div
             className="pp-s1-grid"
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 56, alignItems: "center" }}
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, alignItems: "start" }}
           >
-            {/* LEFT: Carousel + Tags */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* LEFT: Carousel only (no tags/categories) */}
+            <div>
               <Carousel
                 images={product.images}
                 thumbnail={product.thumbnail}
                 onImageClick={openLightbox}
               />
-
-              {(hasCats || hasTags) && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 7, alignItems: "center" }}>
-                  {hasCats && product.categories.map((c, i) => (
-                    <Link key={i} to={`/products?category=${encodeURIComponent(c)}`}
-                      style={{
-                        background: "linear-gradient(135deg,#8b5e3c,#a67853)", color: "#fff",
-                        padding: "4px 13px", borderRadius: 20, fontSize: "0.67rem",
-                        fontWeight: 700, fontFamily: "'Montserrat',sans-serif",
-                        textDecoration: "none", letterSpacing: "0.04em",
-                      }}>
-                      {c}
-                    </Link>
-                  ))}
-                  {hasTags && product.tags.map((t, i) => (
-                    <span key={i} style={{
-                      background: "#faf7f4", color: "#8b5e3c", padding: "4px 12px", borderRadius: 20,
-                      fontSize: "0.65rem", fontWeight: 600, fontFamily: "'Montserrat',sans-serif",
-                      border: "1px solid #e0cfc0",
-                    }}>
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
 
-            {/* RIGHT: Brand, Name, Short Desc, Features — vertically centered */}
-            <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            {/* RIGHT: Brand, Name, Short Desc, Features, Spec Images, Resources — top aligned */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               {(product.brand || product.type) && (
                 <p style={{
-                  fontFamily: "'Montserrat',sans-serif", fontSize: "0.68rem", fontWeight: 700,
-                  letterSpacing: "0.14em", textTransform: "uppercase", color: "#a67853", margin: "0 0 8px",
+                  fontFamily: "'Montserrat',sans-serif", fontSize: "0.62rem", fontWeight: 700,
+                  letterSpacing: "0.14em", textTransform: "uppercase", color: "#a67853", margin: 0,
                 }}>
                   {[product.brand, product.type].filter(Boolean).join(" · ")}
                 </p>
@@ -728,17 +735,17 @@ export default function ProductPage() {
 
               <h1 style={{
                 fontFamily: "'Montserrat',sans-serif", fontWeight: 700,
-                fontSize: "clamp(1.35rem,2.5vw,1.9rem)", color: "#2c1a0e",
-                margin: "0 0 20px", lineHeight: 1.2,
+                fontSize: "clamp(1.2rem,2.2vw,1.6rem)", color: "#2c1a0e",
+                margin: 0, lineHeight: 1.2,
               }}>
                 {product.name}
               </h1>
 
               {hasShortDesc && (
-                <div style={{ marginBottom: 22, paddingBottom: 22, borderBottom: "1px solid #edddd0" }}>
+                <div style={{ paddingBottom: 16, borderBottom: "1px solid #edddd0", textAlign: "left" }}>
                   <p style={{
-                    fontFamily: "'Montserrat',sans-serif", fontSize: "0.92rem",
-                    color: "#7a5c45", lineHeight: 1.8, margin: 0, fontStyle: "italic",
+                    fontFamily: "'Montserrat',sans-serif", fontSize: "0.82rem",
+                    color: "#7a5c45", lineHeight: 1.6, margin: 0,
                   }}>
                     {product.short_description}
                   </p>
@@ -747,13 +754,13 @@ export default function ProductPage() {
 
               {hasFeatures && (
                 <div>
-                  <SectionLabel icon="fa-solid fa-list-check" text="Features" />
-                  <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 7 }}>
+                  <SectionLabel text="Features" />
+                  <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 5 }}>
                     {product.features.map((f, i) => (
                       <li key={i} style={{
                         fontFamily: "'Montserrat',sans-serif", color: "#5a4030",
-                        fontSize: "0.84rem", lineHeight: 1.5,
-                        display: "flex", alignItems: "flex-start", gap: 9,
+                        fontSize: "0.78rem", lineHeight: 1.4,
+                        display: "flex", alignItems: "flex-start", gap: 7,
                       }}>
                         <i className="fa-solid fa-check" style={{ color: "#a67853", fontSize: "0.68rem", marginTop: 4, flexShrink: 0 }} />
                         {f}
@@ -764,29 +771,47 @@ export default function ProductPage() {
               )}
 
               {!hasShortDesc && !hasFeatures && (
-                <p style={{ fontFamily: "'Montserrat',sans-serif", color: "#a67853", fontStyle: "italic", fontSize: "0.86rem" }}>
+                <p style={{ fontFamily: "'Montserrat',sans-serif", color: "#a67853", fontStyle: "italic", fontSize: "0.86rem", margin: 0 }}>
                   More details coming soon.
                 </p>
+              )}
+
+              {/* Spec Images — compact, no bg, no zoom label, still clickable */}
+              {hasSpec && (
+                <div>
+                  <SectionLabel text="Diagram" />
+                  <CompactSpecImages images={product.spec_images} onImageClick={openLightbox} />
+                </div>
+              )}
+
+              {/* Resources */}
+              {hasResources && (
+                <div>
+                  <SectionLabel text="Resources" />
+                  <ResourcesPanel files={files} />
+                </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* ── SECTION 2: Full Description ───────────────────────────── */}
-        {(hasDesc || hasSpecTable) && (
+        {/* ── SECTION 2: Specifications (Full Description + Spec Table) ── */}
+        {hasSection2 && (
           <>
             <Divider />
             <div
               className="pp-outer"
-              style={{ maxWidth: 1140, margin: "0 auto", padding: "48px 32px" }}
+              style={{ maxWidth: 1140, margin: "0 auto", padding: "12px 8px" }}
             >
+              <SectionLabel text="Specifications" />
+
+              {/* Full Description */}
               {hasDesc && (
-                <div style={{ marginBottom: hasSpecTable ? 40 : 0 }}>
-                  <SectionLabel icon="fa-solid fa-align-left" text="Description" />
+                <div style={{ marginBottom: hasSpecTable ? 32 : 0 }}>
                   <div
                     style={{
                       fontFamily: "'Montserrat',sans-serif", color: "#5a4030",
-                      lineHeight: 1.85, fontSize: "0.9rem",
+                      lineHeight: 1.7, fontSize: "0.82rem",
                       maxWidth: "100%",
                     }}
                     dangerouslySetInnerHTML={{ __html: product.description }}
@@ -794,9 +819,10 @@ export default function ProductPage() {
                 </div>
               )}
 
+              {/* Technical Data Table */}
               {hasSpecTable && (
                 <div>
-                  <SectionLabel icon="fa-solid fa-table" text="Technical Data" />
+                  <h4 style={{ fontFamily: "'Montserrat',sans-serif", fontSize: "0.78rem", fontWeight: 700, color: "#8b5e3c", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.07em" }}>Technical Data</h4>
                   <div style={{ overflowX: "auto", borderRadius: 10, border: "1px solid #edddd0" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Montserrat',sans-serif", fontSize: "0.8rem" }}>
                       <thead>
@@ -827,49 +853,7 @@ export default function ProductPage() {
           </>
         )}
 
-        {/* ── SECTION 3: Diagrams + Resources ───────────────────────── */}
-        {hasSection3 && (
-          <>
-            <Divider />
-            <div
-              className="pp-outer"
-              style={{ maxWidth: 1140, margin: "0 auto", padding: "48px 32px" }}
-            >
-              <div
-                className="pp-s3-grid"
-                style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "start" }}
-              >
-                {/* LEFT: Diagrams */}
-                <div>
-                  {hasSpec ? (
-                    <>
-                      <SectionLabel icon="fa-solid fa-diagram-project" text="Diagrams" />
-                      <DiagramCarousel images={product.spec_images} onImageClick={openLightbox} />
-                    </>
-                  ) : (
-                    <div style={{
-                      display: "flex", flexDirection: "column", alignItems: "center",
-                      justifyContent: "center", minHeight: 180, color: "#c4a882",
-                      fontFamily: "'Montserrat',sans-serif", fontSize: "0.82rem",
-                      textAlign: "center", gap: 10, border: "1px dashed #e0cfc0", borderRadius: 10,
-                    }}>
-                      <i className="fa-regular fa-image" style={{ fontSize: "2rem", color: "#ddc9b4" }} />
-                      No diagrams available
-                    </div>
-                  )}
-                </div>
-
-                {/* RIGHT: PDF Resources */}
-                <div>
-                  <SectionLabel icon="fa-solid fa-file-arrow-down" text="Resources" />
-                  <ResourcesPanel files={files} />
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* ── SECTION 4: Related Products ───────────────────────────── */}
+        {/* ── SECTION 3: Related Products ───────────────────────────── */}
         <RelatedProducts currentSlug={slug} categories={product.categories} />
 
       </div>

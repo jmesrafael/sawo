@@ -23,7 +23,6 @@ export async function apiLogin(username, password) {
 }
 
 export async function forgotPassword(username) {
-  // 1. Look up email from your custom users table by username
   const { data: user, error } = await supabase
     .from("users")
     .select("id, email")
@@ -33,39 +32,25 @@ export async function forgotPassword(username) {
   if (error || !user) throw new Error("No account found with that username");
   if (!user.email) throw new Error("No email address associated with this account");
 
-  // 2. Use Supabase Auth directly no Edge Function, no tokens table needed
   const { error: resetError } = await supabase.auth.resetPasswordForEmail(
     user.email,
-    {
-      redirectTo: `${window.location.origin}/admin/reset-password`,
-    }
+    { redirectTo: `${window.location.origin}/admin/reset-password` }
   );
 
   if (resetError) throw new Error("Failed to send reset email: " + resetError.message);
-
   return user.email;
 }
 
-
-// Updated resetPassword uses Supabase Auth session, not custom tokens
 export async function resetPassword(newPassword) {
-  // At this point Supabase Auth has already verified the token from the email link
-  // We just update the password through the active session
-  const { error: authError } = await supabase.auth.updateUser({
-    password: newPassword,
-  });
-
+  const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
   if (authError) throw new Error(authError.message);
 
-  // Keep your custom users table in sync
   const { data: { user: authUser } } = await supabase.auth.getUser();
-
   if (authUser?.email) {
     const { error: dbError } = await supabase
       .from("users")
       .update({ password_hash: newPassword })
       .eq("email", authUser.email);
-
     if (dbError) throw new Error("Password updated in Auth but failed to sync to users table");
   }
 }
@@ -92,7 +77,203 @@ export function clearSession() {
   sessionStorage.removeItem("sawo_user");
 }
 
+// ─── Storage Orphan Cleaner ────────────────────────────────────────────────────
+//
+// Scans both storage buckets and deletes any file whose public URL is NOT
+// referenced by any product row in the database.
+//
+// Columns checked per product:
+//   thumbnail      → text
+//   images         → text[]
+//   spec_images    → text[]
+//   files          → jsonb[]  (each item has a `.url` string)
+//
+// Returns a result object:
+// {
+//   scanned:  { "product-images": N, "product-pdf": N },   // total files found in each bucket
+//   deleted:  { "product-images": [...paths], "product-pdf": [...paths] },
+//   failed:   { "product-images": [...paths], "product-pdf": [...paths] },
+//   kept:     { "product-images": N, "product-pdf": N },
+//   errors:   string[]   // any non-fatal warnings
+// }
+//
+// NOTE: Deletion requires your bucket DELETE policy to allow the anon role.
+// If you see files in `failed`, add a DELETE policy in Supabase:
+//   Storage → Buckets → [bucket] → Policies → New Policy → DELETE → true
+// ──────────────────────────────────────────────────────────────────────────────
 
+const STORAGE_BUCKETS = ["product-images", "product-pdf"];
 
+// Supabase list() max is 1000 per call. We paginate until exhausted.
+async function listAllFiles(bucket) {
+  const PAGE_SIZE = 1000;
+  let offset = 0;
+  const allFiles = [];
+  const errors = [];
 
+  while (true) {
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .list("", {
+        limit: PAGE_SIZE,
+        offset,
+        sortBy: { column: "name", order: "asc" },
+      });
 
+    if (error) {
+      errors.push(`[${bucket}] list error at offset ${offset}: ${error.message}`);
+      break;
+    }
+
+    if (!data || data.length === 0) break;
+
+    // Filter out placeholder/folder entries (they have id === null or name ends with /)
+    const files = data.filter(f => f.id !== null && !f.name.endsWith("/"));
+    allFiles.push(...files);
+
+    if (data.length < PAGE_SIZE) break; // last page
+    offset += PAGE_SIZE;
+  }
+
+  return { files: allFiles, errors };
+}
+
+// Build the full public URL for a file in a bucket — matches what uploadFileToSupabase returns
+function buildPublicUrl(bucket, fileName) {
+  const { data } = supabase.storage.from(bucket).getPublicUrl(fileName);
+  return data.publicUrl;
+}
+
+// Extract just the filename from a full Supabase public URL.
+// Handles transform query params (?width=... etc.) by stripping them first.
+// e.g. "https://xxx.supabase.co/storage/v1/object/public/product-images/abc.webp?t=123"
+// → "abc.webp"
+function fileNameFromUrl(url) {
+  if (!url) return null;
+  try {
+    const clean = url.split("?")[0];
+    const match = clean.match(/\/storage\/v1\/object\/public\/[^/]+\/(.+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Collect every storage URL referenced by any product row.
+// Returns a Set of fully-qualified public URLs (with no query params).
+async function collectReferencedUrls() {
+  const referenced = new Set();
+  const errors = [];
+
+  // Select only the columns that can contain storage URLs
+  const { data: products, error } = await supabase
+    .from("products")
+    .select("thumbnail, images, spec_images, files");
+
+  if (error) {
+    errors.push(`Failed to fetch products: ${error.message}`);
+    return { referenced, errors };
+  }
+
+  for (const p of products || []) {
+    // thumbnail — text
+    if (p.thumbnail) referenced.add(p.thumbnail.split("?")[0]);
+
+    // images — text[]
+    for (const url of p.images || []) {
+      if (url) referenced.add(url.split("?")[0]);
+    }
+
+    // spec_images — text[]
+    for (const url of p.spec_images || []) {
+      if (url) referenced.add(url.split("?")[0]);
+    }
+
+    // files — jsonb array, each item: { name, url }
+    // Handles both the current shape { name, url } and legacy shapes gracefully
+    for (const file of p.files || []) {
+      const url = typeof file === "string" ? file : file?.url;
+      if (url) referenced.add(url.split("?")[0]);
+    }
+  }
+
+  return { referenced, errors };
+}
+
+export async function cleanOrphanedStorageFiles({ dryRun = false } = {}) {
+  const result = {
+    scanned:  {},
+    deleted:  {},
+    failed:   {},
+    kept:     {},
+    dryRun,
+    errors:   [],
+  };
+
+  // ── Step 1: collect all URLs referenced by existing products ──────────────
+  const { referenced, errors: refErrors } = await collectReferencedUrls();
+  result.errors.push(...refErrors);
+
+  if (refErrors.length && referenced.size === 0) {
+    // Could not read products at all — abort to avoid nuking everything
+    result.errors.push("Aborting: could not read product table. No files deleted.");
+    return result;
+  }
+
+  // ── Step 2: scan each bucket and find orphans ─────────────────────────────
+  for (const bucket of STORAGE_BUCKETS) {
+    result.scanned[bucket] = 0;
+    result.deleted[bucket] = [];
+    result.failed[bucket]  = [];
+    result.kept[bucket]    = 0;
+
+    const { files, errors: listErrors } = await listAllFiles(bucket);
+    result.errors.push(...listErrors);
+    result.scanned[bucket] = files.length;
+
+    const orphans = [];
+
+    for (const file of files) {
+      const publicUrl = buildPublicUrl(bucket, file.name);
+      const cleanUrl  = publicUrl.split("?")[0];
+
+      if (referenced.has(cleanUrl)) {
+        result.kept[bucket]++;
+      } else {
+        orphans.push(file.name);
+      }
+    }
+
+    if (orphans.length === 0) continue;
+
+    if (dryRun) {
+      // In dry-run mode, just report what would be deleted
+      result.deleted[bucket] = orphans;
+      continue;
+    }
+
+    // ── Step 3: delete in batches of 100 (Supabase limit per remove() call) ─
+    const BATCH = 100;
+    for (let i = 0; i < orphans.length; i += BATCH) {
+      const batch = orphans.slice(i, i + BATCH);
+
+      const { error: delError } = await supabase.storage
+        .from(bucket)
+        .remove(batch);
+
+      if (delError) {
+        // Whole batch failed — record all as failed
+        result.failed[bucket].push(...batch);
+        result.errors.push(
+          `[${bucket}] Delete batch ${Math.floor(i / BATCH) + 1} failed: ${delError.message}. ` +
+          `This usually means your bucket DELETE policy doesn't allow the anon role. ` +
+          `Fix: Supabase Dashboard → Storage → ${bucket} → Policies → add DELETE policy allowing anon.`
+        );
+      } else {
+        result.deleted[bucket].push(...batch);
+      }
+    }
+  }
+
+  return result;
+}

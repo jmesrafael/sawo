@@ -1,8 +1,10 @@
 // src/Administrator/Products.jsx
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { supabase } from "./supabase";
+import { supabase, cleanOrphanedStorageFiles } from "./supabase";
+import { processPastedTableHTML } from "../utils/cleanTableHTML";
 
 const FRONT_URL = process.env.REACT_APP_FRONT_URL || "";
+const STORAGE_BUCKETS = ["product-images", "product-pdf"];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function slugify(str) {
@@ -27,104 +29,164 @@ const EMPTY_FORM = {
   visible: true, featured: false, sort_order: 0,
 };
 
+// ─── Auto-extract tags from description HTML ──────────────────────────────────
+//
+// Scans every <table> in the description HTML for a column whose header
+// contains "kW" (case-insensitive). For each such column, extracts all
+// numeric cell values and formats them as "X.X kW" tags.
+//
+// Also optionally extracts the first column as model-name tags when the
+// header contains "model" (case-insensitive).
+//
+// Returns { kwTags: string[], modelTags: string[] }
+// e.g. { kwTags: ["4.5 kW", "6.0 kW", "8.0 kW", "9.0 kW"],
+//         modelTags: ["NRN-45Ni2-Z-C", "NRN-60Ni2-Z-C", ...] }
+//
+function extractTagsFromDescription(html) {
+  if (!html || !html.includes("<table")) return { kwTags: [], modelTags: [] };
+
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const tables = doc.querySelectorAll("table");
+
+    const kwTags    = new Set();
+    const modelTags = new Set();
+
+    for (const table of tables) {
+      const rows = Array.from(table.querySelectorAll("tr"));
+      if (rows.length < 2) continue; // need at least header + 1 data row
+
+      // ── Find header row ───────────────────────────────────────────────────
+      // Header row = first row that contains any <th>, or first <tr> in <thead>
+      const headerRow = rows.find(r => r.querySelector("th")) || rows[0];
+      const headers   = Array.from(headerRow.querySelectorAll("th, td"))
+        .map(cell => cell.textContent.replace(/\s+/g, " ").trim().toLowerCase());
+
+      // Find which column index holds kW values
+      // Matches: "kw", "kw (power)", "power (kw)", "kilowatt", etc.
+      const kwColIndex = headers.findIndex(h =>
+        /\bkw\b/i.test(h) || /kilowatt/i.test(h)
+      );
+
+      // Find model column — "model", "heater model", "product model", etc.
+      const modelColIndex = headers.findIndex(h =>
+        /model/i.test(h) || /heater\s*name/i.test(h)
+      );
+
+      if (kwColIndex === -1) continue; // this table has no kW column, skip
+
+      // ── Extract data rows (skip the header row itself) ────────────────────
+      const dataRows = rows.filter(r => r !== headerRow);
+
+      for (const row of dataRows) {
+        const cells = Array.from(row.querySelectorAll("td, th"));
+
+        // Extract kW value
+        if (cells[kwColIndex]) {
+          const raw = cells[kwColIndex].textContent.trim();
+          // Parse as float — handles "4.5", "6", "9.0", "4,5" (European comma)
+          const val = parseFloat(raw.replace(",", "."));
+          if (!isNaN(val) && val > 0 && val < 1000) {
+            // Format to 1 decimal place: 4.5 kW, 6.0 kW, 9.0 kW
+            kwTags.add(`${val.toFixed(1)} kW`);
+          }
+        }
+
+        // Extract model name (optional)
+        if (modelColIndex !== -1 && cells[modelColIndex]) {
+          const model = cells[modelColIndex].textContent.trim();
+          // Only add if it looks like a real model code (not empty, not a number alone)
+          if (model && model.length > 2 && !/^\d+(\.\d+)?$/.test(model)) {
+            modelTags.add(model);
+          }
+        }
+      }
+    }
+
+    return {
+      kwTags:    [...kwTags].sort((a, b) => parseFloat(a) - parseFloat(b)),
+      modelTags: [...modelTags],
+    };
+  } catch (err) {
+    console.warn("[extractTagsFromDescription] Parse error:", err);
+    return { kwTags: [], modelTags: [] };
+  }
+}
+
+// ─── Merge auto-extracted tags with existing manual tags ─────────────────────
+// Preserves all manually-added tags. Adds new auto-extracted ones.
+// Returns the merged deduplicated array.
+function mergeAutoTags(existingTags, kwTags, modelTags) {
+  const all = new Set([...existingTags, ...kwTags, ...modelTags]);
+  return [...all];
+}
+
 // ─── WebP conversion + resize before upload ───────────────────────────────────
-// Converts any image File to a WebP Blob at up to WEBP_MAX_DIM px on the long side.
-// Quality 0.82 gives excellent visuals at ~60-70% of equivalent JPEG size.
 const WEBP_QUALITY = 0.82;
-const WEBP_MAX_DIM = 1800; // px — enough for full-bleed, nothing wasteful
+const WEBP_MAX_DIM = 1800;
 
 function convertToWebP(file, maxDim = WEBP_MAX_DIM, quality = WEBP_QUALITY) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
-
     img.onload = () => {
       URL.revokeObjectURL(objectUrl);
       let { width, height } = img;
-
-      // Downscale if needed, preserve aspect ratio
       if (width > maxDim || height > maxDim) {
-        if (width >= height) {
-          height = Math.round((height / width) * maxDim);
-          width  = maxDim;
-        } else {
-          width  = Math.round((width / height) * maxDim);
-          height = maxDim;
-        }
+        if (width >= height) { height = Math.round((height / width) * maxDim); width = maxDim; }
+        else { width = Math.round((width / height) * maxDim); height = maxDim; }
       }
-
       const canvas = document.createElement("canvas");
-      canvas.width  = width;
-      canvas.height = height;
+      canvas.width = width; canvas.height = height;
       canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-
       canvas.toBlob(
         blob => blob ? resolve(blob) : reject(new Error("WebP conversion failed")),
-        "image/webp",
-        quality
+        "image/webp", quality
       );
     };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error("Image load failed"));
-    };
-
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error("Image load failed")); };
     img.src = objectUrl;
   });
 }
 
 // ─── Upload with automatic WebP conversion ────────────────────────────────────
 async function uploadFileToSupabase(file, bucket = "product-images") {
-  let uploadBlob;
-  let fileName;
-
+  let uploadBlob, fileName;
   if (file.type.startsWith("image/")) {
-    // Convert image → WebP
     try {
       uploadBlob = await convertToWebP(file);
-      fileName   = `${Date.now()}_${Math.random().toString(36).slice(2)}.webp`;
+      fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.webp`;
     } catch (err) {
-      // Fallback: upload original if conversion fails
       console.warn("WebP conversion failed, uploading original:", err);
       uploadBlob = file;
-      const ext  = file.name.split(".").pop();
-      fileName   = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const ext = file.name.split(".").pop();
+      fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
     }
   } else {
-    // Non-image (PDF etc.) — upload as-is
     uploadBlob = file;
-    const ext  = file.name.split(".").pop();
-    fileName   = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const ext = file.name.split(".").pop();
+    fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
   }
-
   const contentType = file.type.startsWith("image/") ? "image/webp" : file.type;
-
   const { error } = await supabase.storage
     .from(bucket)
     .upload(fileName, uploadBlob, { cacheControl: "3600", upsert: false, contentType });
   if (error) throw new Error(error.message);
-
   const { data } = supabase.storage.from(bucket).getPublicUrl(fileName);
   return data.publicUrl;
 }
 
-// ─── Extract bucket + path from a Supabase public URL ─────────────────────────
-// e.g. "https://<proj>.supabase.co/storage/v1/object/public/product-images/abc.webp"
-// → { bucket: "product-images", path: "abc.webp" }
+// ─── Storage URL helpers ───────────────────────────────────────────────────────
 function parseStorageUrl(url) {
   if (!url) return null;
   try {
-    const clean = url.split("?")[0]; // strip transform params
+    const clean = url.split("?")[0];
     const match = clean.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)/);
     if (!match) return null;
     return { bucket: match[1], path: match[2] };
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-// ─── Delete a set of URLs from storage (best-effort, grouped by bucket) ───────
 async function deleteStorageUrls(urls = []) {
   const byBucket = {};
   for (const url of urls) {
@@ -139,7 +201,6 @@ async function deleteStorageUrls(urls = []) {
   );
 }
 
-// ─── Delete ALL storage assets tied to a product row ──────────────────────────
 async function deleteProductStorageFiles(product) {
   const urls = [
     product.thumbnail,
@@ -150,9 +211,6 @@ async function deleteProductStorageFiles(product) {
   await deleteStorageUrls(urls);
 }
 
-// ─── Find URLs present in `savedForm` but removed in `currentForm` ────────────
-// These are orphans — the user deleted or replaced them during editing.
-// Only URLs that actually live in our Supabase storage buckets are returned.
 function findOrphanedUrls(savedForm, currentForm) {
   const collect = f => [
     f.thumbnail,
@@ -160,10 +218,8 @@ function findOrphanedUrls(savedForm, currentForm) {
     ...(f.spec_images || []),
     ...(f.files       || []).map(fi => fi?.url),
   ].filter(Boolean).filter(url => parseStorageUrl(url) !== null);
-
   const savedSet   = new Set(collect(savedForm));
   const currentSet = new Set(collect(currentForm));
-
   return [...savedSet].filter(url => !currentSet.has(url));
 }
 
@@ -194,6 +250,7 @@ function Toast({ toasts, remove }) {
   );
 }
 
+// ─── UI Primitives ────────────────────────────────────────────────────────────
 function Btn({ loading, label, onClick, type = "button", variant = "primary", icon, size, style: extra = {}, disabled }) {
   const cls = ["btn", `btn-${variant}`, size === "sm" ? "btn-sm" : ""].filter(Boolean).join(" ");
   return (
@@ -264,28 +321,120 @@ function Field({ label, type = "text", value, onChange, placeholder, required, h
   );
 }
 
-function RichField({ label, value, onChange, rows = 6 }) {
+function RichField({ label, value, onChange, rows = 6, onNotify }) {
   const [mode, setMode] = useState("text");
+  const textareaRef = useRef(null);
+
+  const handlePaste = (e) => {
+    if (mode !== "html") return;
+    const pastedText = e.clipboardData.getData("text/html") || e.clipboardData.getData("text/plain");
+    if (pastedText && pastedText.includes("<table")) {
+      e.preventDefault();
+      const cleaned = processPastedTableHTML(pastedText);
+      const textarea = textareaRef.current;
+      const start = textarea.selectionStart;
+      const end   = textarea.selectionEnd;
+      const newValue = value.substring(0, start) + cleaned + value.substring(end);
+      onChange({ target: { value: newValue } });
+      if (onNotify) onNotify("✓ Table cleaned and formatted! kW tags will be auto-extracted on Save.", "success");
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + cleaned.length;
+        textarea.focus();
+      }, 0);
+    }
+  };
+
   return (
     <div className="form-group" style={{ marginBottom: 0 }}>
       <div className="rich-field-header">
         {label && <label className="form-label" style={{ marginBottom: 0 }}>{label}</label>}
         <div className="rich-field-modes">
           {["text", "html"].map(m => (
-            <button key={m} type="button" onClick={() => setMode(m)} className={`rich-field-mode-btn${mode === m ? " active" : ""}`}>{m}</button>
+            <button key={m} type="button" onClick={() => setMode(m)}
+              className={`rich-field-mode-btn${mode === m ? " active" : ""}`}>{m}</button>
           ))}
         </div>
       </div>
       <textarea
+        ref={textareaRef}
         value={value} onChange={onChange} rows={rows}
+        onPaste={handlePaste}
         placeholder={mode === "html" ? "<p>Enter HTML here...</p>" : "Enter plain text description..."}
         className="form-textarea"
         style={{ fontFamily: mode === "html" ? "monospace" : "var(--font)", marginTop: 4 }}
       />
+      {mode === "html" && (
+        <div style={{ fontSize: "0.75rem", color: "#666", marginTop: 6 }}>
+          💡 Paste WordPress tables directly — they'll auto-format! kW values &amp; model codes will be auto-tagged on Save.
+        </div>
+      )}
       {mode === "html" && value && (
         <div className="rich-field-preview">
           <p className="rich-field-preview-label">Preview</p>
           <div dangerouslySetInnerHTML={{ __html: value }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Auto-tag preview banner ──────────────────────────────────────────────────
+// Shows the admin a live preview of which tags would be extracted from the
+// current description, without applying them yet (that happens on Save).
+function AutoTagPreview({ description, currentTags }) {
+  const { kwTags, modelTags } = extractTagsFromDescription(description);
+  const newKw    = kwTags.filter(t => !currentTags.includes(t));
+  const newModel = modelTags.filter(t => !currentTags.includes(t));
+  const hasNew   = newKw.length > 0 || newModel.length > 0;
+
+  if (!description || (!hasNew && kwTags.length === 0)) return null;
+
+  return (
+    <div style={{
+      background: "var(--surface-2)",
+      border: "1px solid rgba(var(--brand-rgb, 99,102,241), 0.25)",
+      borderRadius: "var(--r)",
+      padding: "10px 14px",
+      fontSize: "0.78rem",
+      color: "var(--text-2)",
+      lineHeight: 1.7,
+      marginTop: -4,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6, fontWeight: 700, color: "var(--text)", fontSize: "0.8rem" }}>
+        <i className="fa-solid fa-wand-magic-sparkles" style={{ color: "var(--brand)" }} />
+        Auto-tags detected in description
+        <span style={{ fontWeight: 400, color: "var(--text-3)", fontSize: "0.72rem" }}>— will be added on Save</span>
+      </div>
+      {kwTags.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: newModel.length > 0 ? 6 : 0 }}>
+          <span style={{ fontSize: "0.7rem", color: "var(--text-3)", marginRight: 2, alignSelf: "center" }}>kW:</span>
+          {kwTags.map(t => (
+            <span key={t} style={{
+              fontSize: "0.72rem", fontWeight: 700,
+              background: currentTags.includes(t) ? "var(--surface-3, #e5e7eb)" : "rgba(34,197,94,0.12)",
+              color:      currentTags.includes(t) ? "var(--text-3)" : "#16a34a",
+              border:     `1px solid ${currentTags.includes(t) ? "var(--border)" : "rgba(34,197,94,0.3)"}`,
+              borderRadius: 4, padding: "2px 7px",
+            }}>
+              {currentTags.includes(t) ? "✓ " : "+ "}{t}
+            </span>
+          ))}
+        </div>
+      )}
+      {modelTags.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+          <span style={{ fontSize: "0.7rem", color: "var(--text-3)", marginRight: 2, alignSelf: "center" }}>Models:</span>
+          {modelTags.map(t => (
+            <span key={t} style={{
+              fontSize: "0.72rem", fontWeight: 600,
+              background: currentTags.includes(t) ? "var(--surface-3, #e5e7eb)" : "rgba(99,102,241,0.1)",
+              color:      currentTags.includes(t) ? "var(--text-3)" : "var(--brand)",
+              border:     `1px solid ${currentTags.includes(t) ? "var(--border)" : "rgba(99,102,241,0.25)"}`,
+              borderRadius: 4, padding: "2px 7px",
+            }}>
+              {currentTags.includes(t) ? "✓ " : "+ "}{t}
+            </span>
+          ))}
         </div>
       )}
     </div>
@@ -385,21 +534,45 @@ function ImageStrip({ images = [], onRemove }) {
 
 function ImageUploader({ onUpload, label = "Upload Image", multiple = false, uploading = false }) {
   const [dragging, setDragging] = useState(false);
-  const ref = useRef();
+  const [hovering, setHovering] = useState(false);
+  const ref    = useRef();
+  const divRef = useRef();
   const handleFiles = files => { if (!files?.length) return; onUpload(multiple ? Array.from(files) : files[0]); };
+  const handlePaste = e => {
+    if (uploading) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files = [];
+    for (let item of items) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+    }
+    if (files.length > 0) { e.preventDefault(); handleFiles(files); }
+  };
   return (
     <div
+      ref={divRef}
       className={`img-upload-zone${dragging ? " dragging" : ""}${uploading ? " disabled" : ""}`}
       onDragOver={e => { e.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
       onDrop={e => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); }}
+      onPaste={handlePaste}
+      onMouseEnter={() => { setHovering(true); divRef.current?.focus(); }}
+      onMouseLeave={() => setHovering(false)}
       onClick={() => !uploading && ref.current?.click()}
+      tabIndex="0" style={{ outline: "none" }}
     >
       <input ref={ref} type="file" accept="image/*" multiple={multiple} style={{ display: "none" }}
         onChange={e => handleFiles(multiple ? e.target.files : e.target.files[0])} />
       {uploading
         ? <><i className="fa-solid fa-spinner" style={{ color: "var(--brand)", fontSize: "1.1rem", animation: "spin 1s linear infinite" }} /><p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "5px 0 0" }}>Converting &amp; uploading…</p></>
-        : <><i className="fa-solid fa-cloud-arrow-up" style={{ color: "var(--brand)", fontSize: "1.2rem" }} /><p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "5px 0 0" }}>{label}</p></>
+        : <>
+            <i className="fa-solid fa-cloud-arrow-up" style={{ color: "var(--brand)", fontSize: "1.2rem" }} />
+            <p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "5px 0 0" }}>{label}</p>
+            {hovering && <p style={{ fontSize: "0.65rem", color: "var(--brand)", margin: "4px 0 0", fontWeight: 600 }}>Hover to paste image • Ctrl+V</p>}
+          </>
       }
     </div>
   );
@@ -407,18 +580,36 @@ function ImageUploader({ onUpload, label = "Upload Image", multiple = false, upl
 
 function ThumbnailUploader({ onUpload, uploading }) {
   const [dragging, setDragging] = useState(false);
-  const ref = useRef();
+  const [hovering, setHovering] = useState(false);
+  const ref    = useRef();
+  const divRef = useRef();
   const handleFiles = files => {
     const file = files instanceof FileList ? files[0] : (Array.isArray(files) ? files[0] : files);
     if (file) onUpload(file);
   };
+  const handlePaste = e => {
+    if (uploading) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let item of items) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) { e.preventDefault(); handleFiles(file); return; }
+      }
+    }
+  };
   return (
     <div
+      ref={divRef}
       className={`thumb-upload-zone${dragging ? " dragging" : ""}${uploading ? " disabled" : ""}`}
       onDragOver={e => { e.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
       onDrop={e => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); }}
+      onPaste={handlePaste}
+      onMouseEnter={() => { setHovering(true); divRef.current?.focus(); }}
+      onMouseLeave={() => setHovering(false)}
       onClick={() => !uploading && ref.current?.click()}
+      tabIndex="0" style={{ outline: "none" }}
     >
       <input ref={ref} type="file" accept="image/*" style={{ display: "none" }}
         onChange={e => { if (e.target.files[0]) { handleFiles(e.target.files[0]); e.target.value = ""; } }} />
@@ -432,7 +623,8 @@ function ThumbnailUploader({ onUpload, uploading }) {
           <div className="thumb-upload-icon"><i className="fa-solid fa-image" /></div>
           <div style={{ textAlign: "center" }}>
             <p style={{ fontWeight: 700, fontSize: "0.85rem", color: "var(--text)", margin: "0 0 4px" }}>Add Featured Image</p>
-            <p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: 0 }}>Click to browse or drag &amp; drop · auto-converted to WebP</p>
+            <p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "0 0 6px" }}>Click to browse or drag &amp; drop · auto-converted to WebP</p>
+            {hovering && <p style={{ fontSize: "0.65rem", color: "var(--brand)", margin: "4px 0 0", fontWeight: 600 }}>Hover to paste image • Ctrl+V</p>}
           </div>
           <div className="thumb-upload-cta">
             <i className="fa-solid fa-arrow-up-from-bracket" /> Choose Image
@@ -471,6 +663,88 @@ function FileRow({ file, index, onRemove, onRename }) {
   );
 }
 
+function PdfUploader({ onUploadFile, onAddUrl, uploading = false }) {
+  const [dragging, setDragging]         = useState(false);
+  const [hovering, setHovering]         = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [urlInput, setUrlInput]         = useState("");
+  const fileInputRef = useRef();
+  const divRef = useRef();
+
+  const handleFiles = async files => {
+    const fileArray = Array.from(files || []);
+    for (const file of fileArray) await onUploadFile(file);
+  };
+
+  const handleAddUrl = async () => {
+    if (!urlInput.trim()) return;
+    try {
+      const url = urlInput.trim();
+      if (!url.startsWith("http://") && !url.startsWith("https://"))
+        throw new Error("URL must start with http:// or https://");
+      await onAddUrl(url);
+      setUrlInput(""); setShowUrlInput(false);
+    } catch (err) { alert("Error: " + err.message); }
+  };
+
+  return (
+    <>
+      <div
+        ref={divRef}
+        className={`pdf-upload-zone${dragging ? " dragging" : ""}${uploading ? " disabled" : ""}`}
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={e => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); }}
+        onMouseEnter={() => { setHovering(true); divRef.current?.focus(); }}
+        onMouseLeave={() => setHovering(false)}
+        onClick={() => !uploading && fileInputRef.current?.click()}
+        tabIndex="0" style={{ outline: "none" }}
+      >
+        <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" multiple
+          style={{ display: "none" }} onChange={e => handleFiles(e.target.files)} disabled={uploading} />
+        {uploading ? (
+          <>
+            <i className="fa-solid fa-spinner" style={{ color: "var(--brand)", fontSize: "1.2rem", animation: "spin 1s linear infinite" }} />
+            <p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "5px 0 0" }}>Uploading PDF(s)…</p>
+          </>
+        ) : (
+          <>
+            <i className="fa-solid fa-file-pdf" style={{ color: "var(--brand)", fontSize: "1.2rem" }} />
+            <p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "5px 0 0" }}>Upload PDF(s)</p>
+            <p style={{ fontSize: "0.65rem", color: "var(--text-3)", margin: "3px 0 0" }}>Click, drag &amp; drop, or paste link</p>
+            {hovering && <p style={{ fontSize: "0.65rem", color: "var(--brand)", margin: "4px 0 0", fontWeight: 600 }}>Paste URL or upload file</p>}
+          </>
+        )}
+      </div>
+
+      {showUrlInput && (
+        <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+          <input type="text" placeholder="https://example.com/document.pdf"
+            value={urlInput} onChange={e => setUrlInput(e.target.value)} autoFocus
+            onKeyDown={e => { if (e.key === "Enter") handleAddUrl(); if (e.key === "Escape") setShowUrlInput(false); }}
+            style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", fontSize: "0.85rem", fontFamily: "var(--font)", backgroundColor: "var(--surface)", color: "var(--text)" }}
+          />
+          <button type="button" onClick={handleAddUrl} disabled={!urlInput.trim() || uploading}
+            style={{ padding: "8px 14px", backgroundColor: "var(--brand)", color: "white", border: "none", borderRadius: "var(--r-sm)", cursor: "pointer", fontSize: "0.85rem", fontWeight: 600, opacity: !urlInput.trim() || uploading ? 0.5 : 1 }}>
+            Add
+          </button>
+          <button type="button" onClick={() => { setShowUrlInput(false); setUrlInput(""); }}
+            style={{ padding: "8px 14px", backgroundColor: "var(--surface-2)", color: "var(--text-3)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", cursor: "pointer", fontSize: "0.85rem" }}>
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {!showUrlInput && (
+        <button type="button" onClick={() => setShowUrlInput(true)} disabled={uploading}
+          style={{ marginTop: 8, padding: "6px 12px", backgroundColor: "transparent", color: "var(--brand)", border: "1px solid var(--brand)", borderRadius: "var(--r-sm)", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, opacity: uploading ? 0.5 : 1 }}>
+          <i className="fa-solid fa-link" style={{ marginRight: 6 }} /> Paste PDF Link
+        </button>
+      )}
+    </>
+  );
+}
+
 function UnsavedConfirm({ open, onStay, onDiscard }) {
   if (!open) return null;
   return (
@@ -494,9 +768,141 @@ function UnsavedConfirm({ open, onStay, onDiscard }) {
   );
 }
 
+// ─── Storage Cleanup Modal ────────────────────────────────────────────────────
+function StorageCleanupModal({ open, onClose, addToast }) {
+  const [result,  setResult]  = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [dryRun,  setDryRun]  = useState(true);
+
+  useEffect(() => { if (open) { setResult(null); setDryRun(true); } }, [open]);
+
+  const handleRun = async () => {
+    setLoading(true); setResult(null);
+    try {
+      const res = await cleanOrphanedStorageFiles({ dryRun });
+      setResult(res);
+      if (!dryRun) {
+        const total = Object.values(res.deleted).reduce((s, a) => s + a.length, 0);
+        addToast(
+          total > 0 ? `Storage cleaned: ${total} orphaned file(s) deleted.` : "Storage is already clean.",
+          total > 0 ? "success" : "info"
+        );
+      }
+    } catch (err) { addToast("Storage cleanup failed: " + err.message, "error"); }
+    finally { setLoading(false); }
+  };
+
+  const totalOrphans = result ? Object.values(result.deleted).reduce((s, a) => s + a.length, 0) : 0;
+  const totalFailed  = result ? Object.values(result.failed).reduce((s, a)  => s + a.length, 0) : 0;
+
+  return (
+    <Modal open={open} onClose={onClose} title="Storage Cleanup" wide>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "12px 14px", fontSize: "0.82rem", color: "var(--text-2)", lineHeight: 1.7 }}>
+          <strong style={{ color: "var(--text)" }}>What this does:</strong> Scans the{" "}
+          <code style={{ background: "var(--surface)", padding: "1px 5px", borderRadius: 4 }}>product-images</code> and{" "}
+          <code style={{ background: "var(--surface)", padding: "1px 5px", borderRadius: 4 }}>product-pdf</code> buckets
+          and removes any file whose URL is not referenced by any product's thumbnail, gallery, spec images, or PDF list.
+          <br />
+          <span style={{ color: "#e6a817", fontWeight: 600 }}>⚠ Always run a Dry Run first</span> to preview before committing.
+        </div>
+
+        <Toggle label="Dry Run (preview only — nothing will be deleted)" checked={dryRun} onChange={v => { setDryRun(v); setResult(null); }} />
+
+        <Btn loading={loading} label={loading ? "Scanning…" : dryRun ? "Preview Orphaned Files" : "Delete Orphaned Files"}
+          icon={dryRun ? "fa-magnifying-glass" : "fa-trash"} variant={dryRun ? "primary" : "danger"} onClick={handleRun} />
+
+        {result && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {STORAGE_BUCKETS.map(bucket => {
+              const scanned    = result.scanned[bucket]  ?? 0;
+              const deleted    = (result.deleted[bucket] ?? []).length;
+              const failed     = (result.failed[bucket]  ?? []).length;
+              const kept       = result.kept[bucket]     ?? 0;
+              const orphanList = result.deleted[bucket]  ?? [];
+              return (
+                <div key={bucket} style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "14px" }}>
+                  <div style={{ fontWeight: 700, fontSize: "0.85rem", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                    <i className="fa-solid fa-bucket" style={{ color: "var(--brand)" }} />{bucket}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: orphanList.length ? 12 : 0 }}>
+                    {[
+                      { label: "Scanned", value: scanned, color: "var(--text-2)" },
+                      { label: "Kept",    value: kept,    color: "#22c55e" },
+                      { label: result.dryRun ? "Would Delete" : "Deleted", value: deleted, color: deleted > 0 ? "#e6a817" : "var(--text-3)" },
+                      { label: "Failed",  value: failed,  color: failed > 0 ? "var(--danger)" : "var(--text-3)" },
+                    ].map(({ label, value, color }) => (
+                      <div key={label} style={{ textAlign: "center", background: "var(--surface)", borderRadius: "var(--r-sm)", padding: "8px 4px" }}>
+                        <div style={{ fontSize: "1.3rem", fontWeight: 700, color }}>{value}</div>
+                        <div style={{ fontSize: "0.68rem", color: "var(--text-3)", marginTop: 2 }}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {orphanList.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--text-3)", marginBottom: 4, fontWeight: 600 }}>
+                        {result.dryRun ? "Would be deleted:" : "Deleted files:"}
+                      </div>
+                      <div style={{ maxHeight: 130, overflowY: "auto", background: "var(--surface)", borderRadius: "var(--r-sm)", padding: "6px 10px", fontFamily: "monospace", fontSize: "0.7rem", color: "var(--text-2)", lineHeight: 1.8 }}>
+                        {orphanList.map((f, i) => (
+                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <i className={`fa-solid ${result.dryRun ? "fa-file" : "fa-circle-check"}`}
+                              style={{ color: result.dryRun ? "var(--text-3)" : "#22c55e", fontSize: "0.65rem", flexShrink: 0 }} />
+                            {f}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {failed > 0 && (
+                    <div style={{ marginTop: 10, padding: "8px 10px", background: "var(--danger-bg, #fef2f2)", borderRadius: "var(--r-sm)", fontSize: "0.75rem", color: "var(--danger)", lineHeight: 1.5 }}>
+                      <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: 5 }} />
+                      <strong>{failed} file(s) could not be deleted.</strong> Add a DELETE policy for the <code>anon</code> role in Supabase → Storage → {bucket} → Policies.
+                    </div>
+                  )}
+                  {scanned > 0 && orphanList.length === 0 && failed === 0 && (
+                    <div style={{ fontSize: "0.78rem", color: "#22c55e", display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                      <i className="fa-solid fa-circle-check" /> All {scanned} file(s) are referenced — nothing to clean.
+                    </div>
+                  )}
+                  {scanned === 0 && <div style={{ fontSize: "0.78rem", color: "var(--text-3)", fontStyle: "italic" }}>Bucket is empty.</div>}
+                </div>
+              );
+            })}
+
+            {result.errors.length > 0 && (
+              <div style={{ background: "var(--danger-bg, #fef2f2)", border: "1px solid var(--danger)", borderRadius: "var(--r)", padding: "10px 14px", fontSize: "0.75rem", color: "var(--danger)", lineHeight: 1.7 }}>
+                <strong>Warnings / Errors:</strong>
+                {result.errors.map((e, i) => <div key={i} style={{ marginTop: 4 }}>• {e}</div>)}
+              </div>
+            )}
+
+            {result.dryRun && totalOrphans > 0 && (
+              <div style={{ background: "var(--surface-2)", border: "1px dashed #e6a817", borderRadius: "var(--r)", padding: "10px 14px", fontSize: "0.82rem", color: "var(--text-2)", lineHeight: 1.6 }}>
+                <i className="fa-solid fa-circle-info" style={{ marginRight: 6, color: "#e6a817" }} />
+                Found <strong>{totalOrphans} orphaned file(s)</strong>. Uncheck <strong>Dry Run</strong> and click <strong>Delete Orphaned Files</strong> to remove them.
+              </div>
+            )}
+
+            {!result.dryRun && totalOrphans === 0 && totalFailed === 0 && (
+              <div style={{ textAlign: "center", padding: "16px", fontSize: "0.88rem", color: "#22c55e", fontWeight: 600 }}>
+                <i className="fa-solid fa-circle-check" style={{ marginRight: 8 }} />All storage is clean.
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="modal-footer" style={{ paddingTop: 4 }}>
+          <Btn label="Close" variant="ghost" onClick={onClose} />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Grid Card ────────────────────────────────────────────────────────────────
 function ProductCard({ p, onEdit, onDelete }) {
-  const [hovered, setHovered] = useState(false);
+  const [hovered,  setHovered]  = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef();
 
@@ -510,11 +916,9 @@ function ProductCard({ p, onEdit, onDelete }) {
   const productUrl = `${FRONT_URL || window.location.origin}/products/${p.slug}`;
 
   return (
-    <div
-      className="product-grid-card"
+    <div className="product-grid-card"
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => { setHovered(false); setMenuOpen(false); }}
-    >
+      onMouseLeave={() => { setHovered(false); setMenuOpen(false); }}>
       <div className="product-grid-thumb">
         {p.thumbnail
           ? <img src={p.thumbnail} alt={p.name} />
@@ -522,11 +926,8 @@ function ProductCard({ p, onEdit, onDelete }) {
         }
         {hovered && (
           <div className="product-grid-options" ref={menuRef}>
-            <button
-              type="button"
-              className="product-grid-opts-btn"
-              onClick={e => { e.stopPropagation(); setMenuOpen(m => !m); }}
-            >
+            <button type="button" className="product-grid-opts-btn"
+              onClick={e => { e.stopPropagation(); setMenuOpen(m => !m); }}>
               <i className="fa-solid fa-ellipsis-vertical" />
             </button>
             {menuOpen && (
@@ -542,32 +943,20 @@ function ProductCard({ p, onEdit, onDelete }) {
           </div>
         )}
       </div>
-
       <div className="product-grid-info">
-        <a
-          href={productUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="product-grid-name product-name-link"
-          style={{ textDecoration: "none", color: "inherit" }}
-        >
+        <a href={productUrl} target="_blank" rel="noopener noreferrer"
+          className="product-grid-name product-name-link" style={{ textDecoration: "none", color: "inherit" }}>
           {p.name}
         </a>
         {(p.categories || []).length > 0 && (
           <div className="product-grid-pills">
-            {(p.categories || []).slice(0, 2).map(c => (
-              <span key={c} className="tbl-pill tbl-pill-cat">{c}</span>
-            ))}
+            {(p.categories || []).slice(0, 2).map(c => <span key={c} className="tbl-pill tbl-pill-cat">{c}</span>)}
           </div>
         )}
         {(p.tags || []).length > 0 && (
           <div className="product-grid-pills">
-            {(p.tags || []).slice(0, 3).map(t => (
-              <span key={t} className="tbl-pill tbl-pill-tag">{t}</span>
-            ))}
-            {(p.tags || []).length > 3 && (
-              <span className="tbl-pill tbl-pill-more">+{p.tags.length - 3}</span>
-            )}
+            {(p.tags || []).slice(0, 3).map(t => <span key={t} className="tbl-pill tbl-pill-tag">{t}</span>)}
+            {(p.tags || []).length > 3 && <span className="tbl-pill tbl-pill-more">+{p.tags.length - 3}</span>}
           </div>
         )}
       </div>
@@ -580,38 +969,37 @@ export default function Products({ currentUser }) {
   const { toasts, add, remove } = useToast();
 
   const [products, setProducts]         = useState([]);
-  const [loading, setLoading]           = useState(true);
-  const [allCats, setAllCats]           = useState([]);
-  const [allTags, setAllTags]           = useState([]);
+  const [loading,  setLoading]          = useState(true);
+  const [allCats,  setAllCats]          = useState([]);
+  const [allTags,  setAllTags]          = useState([]);
 
-  const [search, setSearch]             = useState("");
+  const [search,       setSearch]       = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [sortDir, setSortDir]           = useState("desc");
-  const [viewMode, setViewMode]         = useState("list");
+  const [sortDir,      setSortDir]      = useState("desc");
+  const [viewMode,     setViewMode]     = useState("list");
 
-  const [selected, setSelected]         = useState(new Set());
-  const [bulkConfirm, setBulkConfirm]   = useState(false);
+  const [selected,    setSelected]    = useState(new Set());
+  const [bulkConfirm, setBulkConfirm] = useState(false);
 
-  const [modalOpen, setModalOpen]       = useState(false);
-  const [editing, setEditing]           = useState(null);
-  const [form, setForm]                 = useState(EMPTY_FORM);
-  // savedForm = exact snapshot of the product when the modal opened.
-  // Used for: (1) dirty-check, (2) detecting orphaned storage files on save.
-  const [savedForm, setSavedForm]       = useState(EMPTY_FORM);
-  const [slugEdited, setSlugEdited]     = useState(false);
-  const [saving, setSaving]             = useState(false);
+  const [modalOpen,  setModalOpen]  = useState(false);
+  const [editing,    setEditing]    = useState(null);
+  const [form,       setForm]       = useState(EMPTY_FORM);
+  const [savedForm,  setSavedForm]  = useState(EMPTY_FORM);
+  const [slugEdited, setSlugEdited] = useState(false);
+  const [saving,     setSaving]     = useState(false);
 
-  const [unsavedOpen, setUnsavedOpen]   = useState(false);
+  const [unsavedOpen, setUnsavedOpen] = useState(false);
   const pendingClose = useRef(null);
 
-  const [confirmDel, setConfirmDel]     = useState(null);
+  const [confirmDel, setConfirmDel] = useState(null);
 
-  const [upThumb, setUpThumb]   = useState(false);
-  const [upImgs,  setUpImgs]    = useState(false);
-  const [upSpec,  setUpSpec]    = useState(false);
-  const [upFile,  setUpFile]    = useState(false);
+  const [upThumb, setUpThumb] = useState(false);
+  const [upImgs,  setUpImgs]  = useState(false);
+  const [upSpec,  setUpSpec]  = useState(false);
+  const [upFile,  setUpFile]  = useState(false);
 
-  const fileInputRef = useRef();
+  const [cleanupOpen, setCleanupOpen] = useState(false);
+
   const isDirty = !formsEqual(form, savedForm);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -648,7 +1036,7 @@ export default function Products({ currentUser }) {
     await supabase.from(table).upsert(rows, { onConflict: "slug", ignoreDuplicates: true });
   };
 
-  // ── Image uploads (all auto-converted to WebP) ─────────────────────────────
+  // ── Image uploads ──────────────────────────────────────────────────────────
   const handleThumbUpload = async file => {
     setUpThumb(true);
     try {
@@ -662,7 +1050,7 @@ export default function Products({ currentUser }) {
   const uploadMoreImages = async files => {
     setUpImgs(true);
     try {
-      const arr = Array.isArray(files) ? files : [files];
+      const arr  = Array.isArray(files) ? files : [files];
       const urls = await Promise.all(arr.map(f => uploadFileToSupabase(f, "product-images")));
       setForm(f => ({ ...f, images: [...f.images, ...urls] }));
       add(`${urls.length} image(s) converted to WebP and uploaded.`, "success");
@@ -673,7 +1061,7 @@ export default function Products({ currentUser }) {
   const uploadSpecImages = async files => {
     setUpSpec(true);
     try {
-      const arr = Array.isArray(files) ? files : [files];
+      const arr  = Array.isArray(files) ? files : [files];
       const urls = await Promise.all(arr.map(f => uploadFileToSupabase(f, "product-images")));
       setForm(f => ({ ...f, spec_images: [...f.spec_images, ...urls] }));
       add(`${urls.length} spec image(s) converted to WebP and uploaded.`, "success");
@@ -681,24 +1069,27 @@ export default function Products({ currentUser }) {
     finally { setUpSpec(false); }
   };
 
-  const handleFileUpload = async e => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
+  const handleFileUpload = async file => {
     setUpFile(true);
     try {
-      for (const file of files) {
-        const url = await uploadFileToSupabase(file, "product-pdf");
-        const rawName = file.name.replace(/\.pdf$/i, "");
-        const displayName = rawName.replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-        setForm(f => ({ ...f, files: [...f.files, { name: displayName, url }] }));
-      }
-      add(`${files.length} file(s) uploaded.`, "success");
-    } catch (err) {
-      add("PDF upload failed: " + err.message, "error");
-    } finally {
-      setUpFile(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
+      const url         = await uploadFileToSupabase(file, "product-pdf");
+      const rawName     = file.name.replace(/\.pdf$/i, "");
+      const displayName = rawName.replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      setForm(f => ({ ...f, files: [...f.files, { name: displayName, url }] }));
+      add("PDF uploaded.", "success");
+    } catch (err) { add("PDF upload failed: " + err.message, "error"); }
+    finally { setUpFile(false); }
+  };
+
+  const handleAddPdfUrl = async url => {
+    setUpFile(true);
+    try {
+      const fileName    = url.split("/").pop().replace(/\.pdf$/i, "");
+      const displayName = fileName.replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      setForm(f => ({ ...f, files: [...f.files, { name: displayName, url }] }));
+      add("PDF link added.", "success");
+    } catch (err) { add("Error adding PDF link: " + err.message, "error"); }
+    finally { setUpFile(false); }
   };
 
   const renameFile = (i, name) => setForm(f => ({ ...f, files: f.files.map((fi, idx) => idx === i ? { ...fi, name } : fi) }));
@@ -722,26 +1113,25 @@ export default function Products({ currentUser }) {
       const { data, error } = await supabase.from("products").select("*").eq("id", row.id).single();
       if (error) throw error;
       const loaded = {
-        name:              data.name || "",
-        slug:              data.slug || "",
+        name:              data.name              || "",
+        slug:              data.slug              || "",
         short_description: data.short_description || "",
-        description:       data.description || "",
-        thumbnail:         data.thumbnail || "",
-        images:            data.images || [],
-        spec_images:       data.spec_images || [],
-        files:             data.files || [],
-        categories:        data.categories || [],
-        tags:              data.tags || [],
-        features:          data.features || [],
-        brand:             data.brand || "",
-        type:              data.type || "",
-        status:            data.status || "published",
-        visible:           data.visible !== false,
-        featured:          data.featured || false,
-        sort_order:        data.sort_order || 0,
+        description:       data.description       || "",
+        thumbnail:         data.thumbnail         || "",
+        images:            data.images            || [],
+        spec_images:       data.spec_images       || [],
+        files:             data.files             || [],
+        categories:        data.categories        || [],
+        tags:              data.tags              || [],
+        features:          data.features          || [],
+        brand:             data.brand             || "",
+        type:              data.type              || "",
+        status:            data.status            || "published",
+        visible:           data.visible           !== false,
+        featured:          data.featured          || false,
+        sort_order:        data.sort_order        || 0,
       };
       setForm(loaded);
-      // Keep a clean snapshot — this is our reference for orphan detection on save
       setSavedForm(loaded);
       setSlugEdited(true);
       setEditing(row);
@@ -749,15 +1139,27 @@ export default function Products({ currentUser }) {
     } catch (err) { add(err.message, "error"); }
   };
 
-  // ── Save ───────────────────────────────────────────────────────────────────
+  // ── Save (with auto-tag extraction) ───────────────────────────────────────
   const handleSave = async e => {
     e.preventDefault();
     if (!form.name) return add("Product name is required.", "error");
     if (!form.slug) return add("Slug is required.", "error");
     setSaving(true);
     try {
+      // ── Auto-extract kW + model tags from description tables ──────────────
+      const { kwTags, modelTags } = extractTagsFromDescription(form.description);
+      const mergedTags = mergeAutoTags(form.tags, kwTags, modelTags);
+
+      // Report to admin if new tags were added automatically
+      const newAutoTags = mergedTags.filter(t => !form.tags.includes(t));
+      if (newAutoTags.length > 0) {
+        add(`Auto-tagged: ${newAutoTags.join(", ")}`, "info");
+        // Also update the form so the tag pills reflect the final saved state
+        setForm(f => ({ ...f, tags: mergedTags }));
+      }
+
       await upsertTaxonomy(form.categories, "categories");
-      await upsertTaxonomy(form.tags, "tags");
+      await upsertTaxonomy(mergedTags, "tags");
       fetchMeta();
 
       const payload = {
@@ -770,10 +1172,10 @@ export default function Products({ currentUser }) {
         spec_images:       form.spec_images,
         files:             form.files,
         categories:        form.categories,
-        tags:              form.tags,
+        tags:              mergedTags,         // ← use merged tags, not form.tags
         features:          form.features,
-        brand:             form.brand.trim() || null,
-        type:              form.type.trim() || null,
+        brand:             form.brand.trim()  || null,
+        type:              form.type.trim()   || null,
         status:            form.status,
         visible:           form.visible,
         featured:          form.featured,
@@ -784,13 +1186,6 @@ export default function Products({ currentUser }) {
       if (editing) {
         const { error } = await supabase.from("products").update(payload).eq("id", editing.id);
         if (error) throw error;
-
-        // ── Orphan cleanup ────────────────────────────────────────────────────
-        // Any URL that was in savedForm (the DB snapshot on open) but is no
-        // longer in the current form was deliberately removed by the user —
-        // either deleted from the strip, replaced by a new upload, or had the
-        // thumbnail cleared. We delete those files from storage now so they
-        // don't accumulate as dead weight in the bucket.
         const orphans = findOrphanedUrls(savedForm, form);
         if (orphans.length) {
           await deleteStorageUrls(orphans);
@@ -816,10 +1211,8 @@ export default function Products({ currentUser }) {
       const { data: fullProduct, error: fetchErr } = await supabase
         .from("products").select("*").eq("id", target.id).single();
       if (fetchErr) throw fetchErr;
-
       const { error: delErr } = await supabase.from("products").delete().eq("id", target.id);
       if (delErr) throw delErr;
-
       await deleteProductStorageFiles(fullProduct);
       add("Product and associated files deleted.", "success");
     } catch (err) { add(err.message, "error"); }
@@ -834,10 +1227,8 @@ export default function Products({ currentUser }) {
       const { data: fullProducts, error: fetchErr } = await supabase
         .from("products").select("*").in("id", ids);
       if (fetchErr) throw fetchErr;
-
       const { error: delErr } = await supabase.from("products").delete().in("id", ids);
       if (delErr) throw delErr;
-
       await Promise.allSettled((fullProducts || []).map(p => deleteProductStorageFiles(p)));
       add(`${ids.length} product(s) and their files deleted.`, "success");
     } catch (err) { add(err.message, "error"); }
@@ -867,7 +1258,7 @@ export default function Products({ currentUser }) {
       p.brand?.toLowerCase().includes(q) ||
       p.type?.toLowerCase().includes(q) ||
       (p.categories || []).some(c => c.toLowerCase().includes(q)) ||
-      (p.tags || []).some(t => t.toLowerCase().includes(q))
+      (p.tags       || []).some(t => t.toLowerCase().includes(q))
     );
   });
 
@@ -882,6 +1273,7 @@ export default function Products({ currentUser }) {
     ? new Date(d).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })
     : "-";
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="products-page">
       <Toast toasts={toasts} remove={remove} />
@@ -904,43 +1296,35 @@ export default function Products({ currentUser }) {
       <div className="products-toolbar">
         <div className="search-wrap">
           <i className="fa-solid fa-magnifying-glass" />
-          <input
-            className="search-input"
-            value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search name, brand, tag..."
-          />
+          <input className="search-input" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search name, brand, tag..." />
         </div>
-
         <select className="filter-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="">All Status</option>
           <option value="published">Published</option>
           <option value="draft">Draft</option>
         </select>
-
         <select className="filter-select" value={sortDir} onChange={e => setSortDir(e.target.value)}>
           <option value="desc">Newest first</option>
           <option value="asc">Oldest first</option>
         </select>
-
         <div className="view-toggle">
           {[{ mode: "list", icon: "fa-list" }, { mode: "grid", icon: "fa-grip" }].map(({ mode, icon }) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setViewMode(mode)}
-              className={`view-toggle-btn${viewMode === mode ? " active" : ""}`}
-            >
+            <button key={mode} type="button" onClick={() => setViewMode(mode)}
+              className={`view-toggle-btn${viewMode === mode ? " active" : ""}`}>
               <i className={`fa-solid ${icon}`} />
             </button>
           ))}
         </div>
-
         {selected.size > 0 && (
-          <button type="button" className="btn btn-sm" style={{ background: "var(--danger-bg)", color: "var(--danger)", border: "1px solid var(--danger)", gap: 5 }} onClick={() => setBulkConfirm(true)}>
+          <button type="button" className="btn btn-sm"
+            style={{ background: "var(--danger-bg)", color: "var(--danger)", border: "1px solid var(--danger)", gap: 5 }}
+            onClick={() => setBulkConfirm(true)}>
             <i className="fa-solid fa-trash" /> Delete {selected.size}
           </button>
         )}
-
+        <Btn icon="fa-broom" label="Storage" variant="ghost" size="sm"
+          onClick={() => setCleanupOpen(true)} style={{ marginLeft: 4 }} />
         <Btn icon="fa-plus" label="New Product" onClick={openCreate} style={{ marginLeft: "auto" }} />
       </div>
 
@@ -949,12 +1333,10 @@ export default function Products({ currentUser }) {
         <div className="product-grid">
           {filtered.length === 0 && (
             <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 40, color: "var(--text-3)", fontStyle: "italic", fontSize: "0.82rem" }}>
-              {search ? `No products match "${search}"` : "No products yet - click New Product to create one."}
+              {search ? `No products match "${search}"` : "No products yet — click New Product to create one."}
             </div>
           )}
-          {filtered.map(p => (
-            <ProductCard key={p.id} p={p} onEdit={openEdit} onDelete={setConfirmDel} />
-          ))}
+          {filtered.map(p => <ProductCard key={p.id} p={p} onEdit={openEdit} onDelete={setConfirmDel} />)}
         </div>
       )}
 
@@ -970,12 +1352,9 @@ export default function Products({ currentUser }) {
               <thead>
                 <tr>
                   <th style={{ width: 36, paddingRight: 0 }}>
-                    <input
-                      type="checkbox"
-                      className="tbl-checkbox"
+                    <input type="checkbox" className="tbl-checkbox"
                       checked={filtered.length > 0 && selected.size === filtered.length}
-                      onChange={toggleSelectAll}
-                    />
+                      onChange={toggleSelectAll} />
                   </th>
                   <th style={{ width: 44 }}></th>
                   <th>Product</th>
@@ -988,11 +1367,9 @@ export default function Products({ currentUser }) {
               </thead>
               <tbody>
                 {filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="table-empty">
-                      {search ? `No products match "${search}"` : "No products yet - click New Product to create one."}
-                    </td>
-                  </tr>
+                  <tr><td colSpan={8} className="table-empty">
+                    {search ? `No products match "${search}"` : "No products yet — click New Product to create one."}
+                  </td></tr>
                 )}
                 {filtered.map(p => (
                   <tr key={p.id} className={selected.has(p.id) ? "row-selected" : ""}>
@@ -1010,41 +1387,25 @@ export default function Products({ currentUser }) {
                         {p.name}
                       </a>
                       <div className="product-meta">
-                        {p.featured && (
-                          <span className="product-meta-tag featured">
-                            <i className="fa-solid fa-star" style={{ marginRight: 3 }} />Featured
-                          </span>
-                        )}
-                        {(p.files || []).length > 0 && (
-                          <span className="product-meta-tag files">
-                            <i className="fa-solid fa-file-pdf" style={{ marginRight: 3 }} />{p.files.length} file(s)
-                          </span>
-                        )}
+                        {p.featured && <span className="product-meta-tag featured"><i className="fa-solid fa-star" style={{ marginRight: 3 }} />Featured</span>}
+                        {(p.files || []).length > 0 && <span className="product-meta-tag files"><i className="fa-solid fa-file-pdf" style={{ marginRight: 3 }} />{p.files.length} file(s)</span>}
                       </div>
                     </td>
                     <td>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-                        {(p.categories || []).slice(0, 2).map(c => (
-                          <span key={c} className="tbl-pill tbl-pill-cat">{c}</span>
-                        ))}
+                        {(p.categories || []).slice(0, 2).map(c => <span key={c} className="tbl-pill tbl-pill-cat">{c}</span>)}
                         {(p.categories || []).length > 2 && <span className="tbl-pill tbl-pill-more">+{p.categories.length - 2}</span>}
                         {!(p.categories || []).length && <span style={{ color: "var(--text-3)", fontSize: "0.72rem" }}>-</span>}
                       </div>
                     </td>
                     <td>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-                        {(p.tags || []).slice(0, 3).map(t => (
-                          <span key={t} className="tbl-pill tbl-pill-tag">{t}</span>
-                        ))}
+                        {(p.tags || []).slice(0, 3).map(t => <span key={t} className="tbl-pill tbl-pill-tag">{t}</span>)}
                         {(p.tags || []).length > 3 && <span className="tbl-pill tbl-pill-more">+{p.tags.length - 3}</span>}
                         {!(p.tags || []).length && <span style={{ color: "var(--text-3)", fontSize: "0.72rem" }}>-</span>}
                       </div>
                     </td>
-                    <td>
-                      <span className="tbl-status">
-                        {!p.visible ? "Hidden" : p.status === "published" ? "Published" : "Draft"}
-                      </span>
-                    </td>
+                    <td><span className="tbl-status">{!p.visible ? "Hidden" : p.status === "published" ? "Published" : "Draft"}</span></td>
                     <td className="tbl-date">{formatDate(p.updated_at)}</td>
                     <td style={{ textAlign: "right" }}>
                       <div className="table-actions">
@@ -1074,9 +1435,7 @@ export default function Products({ currentUser }) {
           <SectionLabel label="Featured Image" />
           {form.thumbnail ? (
             <div className="thumb-preview-wrap">
-              <div className="thumb-preview">
-                <img src={form.thumbnail} alt="Featured" />
-              </div>
+              <div className="thumb-preview"><img src={form.thumbnail} alt="Featured" /></div>
               <div className="thumb-actions">
                 <label className={`thumb-replace-label${upThumb ? " uploading" : ""}`}>
                   <i className="fa-solid fa-arrow-up-from-bracket" />
@@ -1104,15 +1463,24 @@ export default function Products({ currentUser }) {
             <Field label="Brand" value={form.brand} onChange={e => setForm(f => ({ ...f, brand: e.target.value }))} placeholder="SAWO" />
             <Field label="Type / Model" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} placeholder="Premium Series" />
           </div>
-          <Field label="Short Description" value={form.short_description} onChange={e => setForm(f => ({ ...f, short_description: e.target.value }))} placeholder="One-line summary" />
-          <RichField label="Full Description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          <Field label="Short Description" value={form.short_description}
+            onChange={e => setForm(f => ({ ...f, short_description: e.target.value }))} placeholder="One-line summary" />
+
+          {/* Full Description with auto-tag preview directly beneath it */}
+          <RichField label="Full Description" value={form.description}
+            onChange={e => setForm(f => ({ ...f, description: e.target.value }))} onNotify={add} />
+          <AutoTagPreview description={form.description} currentTags={form.tags} />
 
           <SectionLabel label="Categories & Tags" />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <PillInput label="Categories" value={form.categories} onChange={v => setForm(f => ({ ...f, categories: v }))} placeholder="e.g. Wall-Mounted" suggestions={allCats} />
-            <PillInput label="Tags" value={form.tags} onChange={v => setForm(f => ({ ...f, tags: v }))} placeholder="e.g. electric, 9kW" suggestions={allTags} />
+            <PillInput label="Categories" value={form.categories}
+              onChange={v => setForm(f => ({ ...f, categories: v }))} placeholder="e.g. Wall-Mounted" suggestions={allCats} />
+            <PillInput label="Tags" value={form.tags}
+              onChange={v => setForm(f => ({ ...f, tags: v }))}
+              placeholder="e.g. electric, 9kW" suggestions={allTags} />
           </div>
-          <PillInput label="Features" value={form.features} onChange={v => setForm(f => ({ ...f, features: v }))} placeholder="e.g. Auto shutoff" />
+          <PillInput label="Features" value={form.features}
+            onChange={v => setForm(f => ({ ...f, features: v }))} placeholder="e.g. Auto shutoff" />
 
           <SectionLabel label="Gallery Images" />
           {form.images.length > 0 ? (
@@ -1144,23 +1512,15 @@ export default function Products({ currentUser }) {
             <ImageUploader onUpload={uploadSpecImages} label="Upload Spec Images · auto-converted to WebP" multiple uploading={upSpec} />
           )}
 
-          <SectionLabel label="Resources (PDFs - Brochures, Manuals)" />
+          <SectionLabel label="Resources (PDFs — Brochures, Manuals)" />
           {form.files.length > 0 && (
             <div className="file-rows">
-              {form.files.map((f, i) => (
-                <FileRow key={i} file={f} index={i} onRemove={removeFile} onRename={renameFile} />
-              ))}
+              {form.files.map((f, i) => <FileRow key={i} file={f} index={i} onRemove={removeFile} onRename={renameFile} />)}
             </div>
           )}
-          <div style={{ display: "flex", alignItems: "center", marginTop: form.files.length > 0 ? 8 : 0 }}>
-            <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" multiple style={{ display: "none" }} onChange={handleFileUpload} disabled={upFile} />
-            <button type="button" disabled={upFile} onClick={() => fileInputRef.current?.click()} className="pdf-upload-btn">
-              {upFile
-                ? <><i className="fa-solid fa-spinner" style={{ animation: "spin 1s linear infinite" }} /> Uploading...</>
-                : <><i className="fa-solid fa-file-arrow-up" /> Upload PDF(s)</>
-              }
-            </button>
-            {form.files.length > 0 && <span className="pdf-file-count">{form.files.length} file(s) attached</span>}
+          <div style={{ marginTop: form.files.length > 0 ? 12 : 0 }}>
+            <PdfUploader onUploadFile={handleFileUpload} onAddUrl={handleAddPdfUrl} uploading={upFile} />
+            {form.files.length > 0 && <p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "8px 0 0" }}>📎 {form.files.length} file(s) attached</p>}
           </div>
 
           <SectionLabel label="Status & Visibility" />
@@ -1189,24 +1549,19 @@ export default function Products({ currentUser }) {
         </form>
       </Modal>
 
+      {/* Storage Cleanup Modal */}
+      <StorageCleanupModal open={cleanupOpen} onClose={() => setCleanupOpen(false)} addToast={add} />
+
       {/* Bulk delete confirm */}
-      <Confirm
-        open={bulkConfirm}
-        onClose={() => setBulkConfirm(false)}
-        onConfirm={handleBulkDelete}
+      <Confirm open={bulkConfirm} onClose={() => setBulkConfirm(false)} onConfirm={handleBulkDelete}
         title="Delete Selected?"
         message={`Delete ${selected.size} selected product(s)? This cannot be undone. All associated images and files will also be removed.`}
-        confirmLabel="Delete All"
-      />
+        confirmLabel="Delete All" />
 
-      <Confirm
-        open={!!confirmDel}
-        onClose={() => setConfirmDel(null)}
-        onConfirm={handleDelete}
+      <Confirm open={!!confirmDel} onClose={() => setConfirmDel(null)} onConfirm={handleDelete}
         title="Delete Product?"
         message={`Delete "${confirmDel?.name}"? This cannot be undone. All associated images and files will also be removed.`}
-        confirmLabel="Delete"
-      />
+        confirmLabel="Delete" />
     </div>
   );
 }
