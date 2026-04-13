@@ -40,6 +40,10 @@ export default function Users() {
   const [formLoading, setFormLoading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [showPassword, setShowPassword]   = useState(false);
+  const [changePassModal, setChangePassModal] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passError, setPassError] = useState("");
 
   const fetchUsers = async () => {
     const { data, error } = await supabase
@@ -118,6 +122,39 @@ export default function Users() {
     fetchUsers();
   };
 
+  const handleChangePassword = async e => {
+    e.preventDefault();
+    setPassError("");
+
+    if (!newPassword) {
+      setPassError("New password is required");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPassError("Passwords do not match");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPassError("Password must be at least 6 characters");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("users")
+        .update({ password_hash: newPassword })
+        .eq("id", editUser.id);
+      if (error) throw error;
+
+      setChangePassModal(false);
+      setNewPassword("");
+      setConfirmPassword("");
+      fetchUsers();
+    } catch (err) {
+      setPassError(err.message);
+    }
+  };
+
   const toggleSelect = id => {
     setSelected(prev => {
       const next = new Set(prev);
@@ -134,6 +171,7 @@ export default function Users() {
   const roleBadge = role => {
     if (role === "superadmin") return <span className="tbl-pill tbl-pill-cat">{role}</span>;
     if (role === "editor")     return <span className="tbl-pill tbl-pill-tag">{role}</span>;
+    if (role === "viewer")     return <span className="tbl-pill" style={{ background: "#e0e7ff", color: "#4f46e5", border: "1px solid #c7d2fe" }}>viewer</span>;
     return <span className="tbl-pill tbl-pill-more">{role}</span>;
   };
 
@@ -168,6 +206,7 @@ export default function Users() {
             <option value="admin">admin</option>
             <option value="superadmin">superadmin</option>
             <option value="editor">editor</option>
+            <option value="viewer">viewer</option>
           </select>
 
           <select className="filter-select" value={sortDir} onChange={e => setSortDir(e.target.value)}>
@@ -255,25 +294,37 @@ export default function Users() {
             <input className="form-input" type="text" required value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} />
           </div>
 
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">{editUser ? "New Password" : "Password"}</label>
-            <p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "0 0 5px" }}>
-              {editUser ? "Leave blank to keep the current password." : "Optional - user can set their own password via Forgot Password."}
-            </p>
-            <div className="input-wrap">
-              <input
-                className="form-input"
-                type={showPassword ? "text" : "password"}
-                value={form.password_hash}
-                onChange={e => setForm({ ...form, password_hash: e.target.value })}
-                style={{ paddingRight: "2.5rem" }}
-                placeholder={editUser ? "Leave blank to keep current" : "Optional"}
-              />
-              <button type="button" className="input-eye-btn" onClick={() => setShowPassword(s => !s)}>
-                <i className={showPassword ? "fa-regular fa-eye-slash" : "fa-regular fa-eye"} />
-              </button>
+          {!editUser ? (
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Password</label>
+              <p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "0 0 5px" }}>
+                Optional - user can set their own password via Forgot Password.
+              </p>
+              <div className="input-wrap">
+                <input
+                  className="form-input"
+                  type={showPassword ? "text" : "password"}
+                  value={form.password_hash}
+                  onChange={e => setForm({ ...form, password_hash: e.target.value })}
+                  style={{ paddingRight: "2.5rem" }}
+                  placeholder="Optional"
+                />
+                <button type="button" className="input-eye-btn" onClick={() => setShowPassword(s => !s)}>
+                  <i className={showPassword ? "fa-regular fa-eye-slash" : "fa-regular fa-eye"} />
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-sm"
+              style={{ background: "var(--brand)", color: "#fff", border: "none", width: "fit-content" }}
+              onClick={() => { setChangePassModal(true); setPassError(""); setNewPassword(""); setConfirmPassword(""); }}
+            >
+              <i className="fa-solid fa-key" style={{ marginRight: 6 }} />
+              Change Password
+            </button>
+          )}
 
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Full Name</label>
@@ -296,6 +347,7 @@ export default function Users() {
               <option value="admin">admin</option>
               <option value="superadmin">superadmin</option>
               <option value="editor">editor</option>
+              <option value="viewer">viewer</option>
             </select>
           </div>
 
@@ -335,6 +387,49 @@ export default function Users() {
           </div>
         </div>
       )}
+
+      {/* Change Password Modal */}
+      <Modal open={changePassModal} onClose={() => setChangePassModal(false)} title="Change Password">
+        <form onSubmit={handleChangePassword} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">New Password <span style={{ color: "var(--danger)" }}>*</span></label>
+            <input
+              className="form-input"
+              type="password"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              placeholder="Enter new password"
+              required
+            />
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Confirm Password <span style={{ color: "var(--danger)" }}>*</span></label>
+            <input
+              className="form-input"
+              type="password"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              placeholder="Confirm new password"
+              required
+            />
+          </div>
+
+          {passError && (
+            <div className="alert alert-error">
+              <i className="fa-solid fa-circle-exclamation" /> {passError}
+            </div>
+          )}
+
+          <div className="modal-footer">
+            <button type="button" className="btn btn-ghost" onClick={() => setChangePassModal(false)}>Cancel</button>
+            <button type="submit" className="btn btn-primary">
+              <i className="fa-solid fa-check" style={{ marginRight: 6 }} />
+              Change Password
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

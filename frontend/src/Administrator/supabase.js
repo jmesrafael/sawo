@@ -77,6 +77,26 @@ export function clearSession() {
   sessionStorage.removeItem("sawo_user");
 }
 
+export async function logActivity({ action, entity, entity_id, entity_name, username, user_id, meta = null }) {
+  try {
+    const { error } = await supabase.from("activity_logs").insert({
+      action,
+      entity,
+      entity_id: entity_id ? String(entity_id) : null,
+      entity_name,
+      username,
+      user_id: user_id ? String(user_id) : null,
+      meta,
+    });
+    if (error) {
+      console.warn("[logActivity] Failed to write log:", error.message);
+      console.error("Full error:", error);
+    }
+  } catch (err) {
+    console.error("[logActivity] Exception:", err);
+  }
+}
+
 // ─── Storage Orphan Cleaner ────────────────────────────────────────────────────
 //
 // Scans both storage buckets and deletes any file whose public URL is NOT

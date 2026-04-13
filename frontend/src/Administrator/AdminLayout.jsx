@@ -6,7 +6,9 @@ import logo from "./SAWO-logo.png";
 
 const NAV = [
   { to: "/admin/products", label: "Products", icon: "fa-solid fa-box" },
+  { to: "/admin/models", label: "Models", icon: "fa-solid fa-folder-open" },
   { to: "/admin/taxonomy", label: "Taxonomy", icon: "fa-solid fa-tags" },
+  { to: "/admin/logs", label: "Logs", icon: "fa-solid fa-file-alt" },
   { to: "/admin/users", label: "Users", icon: "fa-solid fa-users" },
 ];
 
@@ -180,7 +182,7 @@ export default function AdminLayout({ children }) {
 
       {/* Main */}
       <main style={{ flex: 1, overflowY: "auto", padding: "2rem 2.5rem", background: dark ? "#161412" : "#f7f5f2", transition: "background 0.2s" }}>
-        {children}
+        {React.cloneElement(children, { currentUser: session.user })}
       </main>
     </div>
   );

@@ -43,10 +43,13 @@ import ProductPage from "./pages/ProductPage";
 
 // Admin pages
 import Login     from "./Administrator/Login";
-import ResetPassword from "./Administrator/ResetPassword"; 
+import ResetPassword from "./Administrator/ResetPassword";
 import Users     from "./Administrator/Users";
 import Products  from "./Administrator/Products";
+import Models    from "./Administrator/Models";
 import Taxonomy  from "./Administrator/Taxonomy";
+import Logs  from "./Administrator/Logs";
+import Viewer    from "./Administrator/Viewer";
 import ProtectedRoute from "./Administrator/ProtectedRoute";
 
 export default function App() {
@@ -106,6 +109,17 @@ export default function App() {
           } />
           <Route path="/admin/taxonomy" element={
             <ProtectedRoute><AdminLayout><Taxonomy /></AdminLayout></ProtectedRoute>
+          } />
+          <Route path="/admin/logs" element={
+            <ProtectedRoute><AdminLayout><Logs /></AdminLayout></ProtectedRoute>
+          } />
+          <Route path="/admin/models" element={
+            <ProtectedRoute><AdminLayout><Models /></AdminLayout></ProtectedRoute>
+          } />
+
+          {/* Viewer role - products grid only */}
+          <Route path="/viewer" element={
+            <ProtectedRoute><Viewer /></ProtectedRoute>
           } />
 
           {/* Redirect root /admin â†’ login */}
