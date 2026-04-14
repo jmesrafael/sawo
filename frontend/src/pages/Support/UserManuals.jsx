@@ -1,7 +1,7 @@
 ﻿// src/pages/Support/UserManuals.jsx
 
 import React, { useState, useEffect, useMemo } from "react";
-import { getVisibleProducts } from "../../local-storage/cacheReader";
+import { getVisibleProductsCached } from "../../local-storage/supabaseReader";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function localOrRemote(product, field) {
@@ -320,9 +320,9 @@ export default function UserManuals() {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    function fetchProducts() {
+    (async () => {
       try {
-        let data = getVisibleProducts();
+        let data = await getVisibleProductsCached();
         // Sort by sort_order first, then by created_at descending
         data.sort((a, b) => {
           const sortA = a.sort_order ?? 999;
@@ -336,8 +336,7 @@ export default function UserManuals() {
       } finally {
         setLoading(false);
       }
-    }
-    fetchProducts();
+    })();
   }, []);
 
   const displayed = useMemo(() => {

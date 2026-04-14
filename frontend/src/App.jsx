@@ -49,7 +49,6 @@ import Products  from "./Administrator/Products";
 import Models    from "./Administrator/Models";
 import Taxonomy  from "./Administrator/Taxonomy";
 import Logs  from "./Administrator/Logs";
-import Viewer    from "./Administrator/Viewer";
 import ProtectedRoute from "./Administrator/ProtectedRoute";
 
 export default function App() {
@@ -117,11 +116,6 @@ export default function App() {
             <ProtectedRoute><AdminLayout><Models /></AdminLayout></ProtectedRoute>
           } />
 
-          {/* Viewer role - products grid only */}
-          <Route path="/viewer" element={
-            <ProtectedRoute><Viewer /></ProtectedRoute>
-          } />
-
           {/* Redirect root /admin â†’ login */}
           <Route path="/admin" element={<Navigate to="/login" replace />} />
 
@@ -129,8 +123,3 @@ export default function App() {
       </Router>
   );
 }
-
-
-
-
-

@@ -9,12 +9,7 @@
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getProductBySlug, getProductsByCategory } from "../local-storage/cacheReader";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function localOrRemote(product, field) {
-  return product?.[`local_${field}`] || product?.[field] || null;
-}
+import { supabase } from "../Administrator/supabase";
 
 /* ── Lightbox ─────────────────────────────────────────────────────── */
 function Lightbox({ images, startIndex, onClose }) {
@@ -342,6 +337,9 @@ function CompactSpecImages({ images, onImageClick }) {
 
 /* ── PDF Resources Panel ──────────────────────────────────────────── */
 function ResourcesPanel({ files }) {
+  const [expanded, setExpanded] = useState(false);
+  const isMultiple = files?.length > 1;
+
   if (!files?.length) return (
     <div style={{
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
@@ -353,34 +351,101 @@ function ResourcesPanel({ files }) {
     </div>
   );
 
+  // Single file: show normally
+  if (!isMultiple) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {files.map((f, i) => (
+          <a key={i} href={f.url} target="_blank" rel="noopener noreferrer"
+            style={{
+              display: "flex", alignItems: "center", gap: 14, padding: "14px 16px",
+              background: "#faf7f4", borderRadius: 10, border: "1px solid #edddd0",
+              color: "#2c1a0e", textDecoration: "none",
+              fontFamily: "'Montserrat',sans-serif", fontSize: "0.82rem",
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "#f5ede3"; e.currentTarget.style.borderColor = "#d4b896"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "#faf7f4"; e.currentTarget.style.borderColor = "#edddd0"; }}
+          >
+            <div style={{
+              width: 40, height: 40, borderRadius: 9,
+              background: "linear-gradient(135deg,#8b5e3c,#a67853)",
+              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+            }}>
+              <i className="fa-solid fa-file-pdf" style={{ color: "#fff", fontSize: "1rem" }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "#2c1a0e", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
+              <div style={{ fontSize: "0.65rem", color: "#a67853", marginTop: 2 }}>PDF · Click to open</div>
+            </div>
+            <i className="fa-solid fa-arrow-up-right-from-square" style={{ color: "#a67853", fontSize: "0.7rem", flexShrink: 0 }} />
+          </a>
+        ))}
+      </div>
+    );
+  }
+
+  // Multiple files: show with dropdown toggle
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {files.map((f, i) => (
-        <a key={i} href={f.local_path || f.url} target="_blank" rel="noopener noreferrer"
-          style={{
-            display: "flex", alignItems: "center", gap: 14, padding: "14px 16px",
-            background: "#faf7f4", borderRadius: 10, border: "1px solid #edddd0",
-            color: "#2c1a0e", textDecoration: "none",
-            fontFamily: "'Montserrat',sans-serif", fontSize: "0.82rem",
-            transition: "all 0.2s",
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = "#f5ede3"; e.currentTarget.style.borderColor = "#d4b896"; }}
-          onMouseLeave={e => { e.currentTarget.style.background = "#faf7f4"; e.currentTarget.style.borderColor = "#edddd0"; }}
-        >
-          <div style={{
-            width: 40, height: 40, borderRadius: 9,
-            background: "linear-gradient(135deg,#8b5e3c,#a67853)",
-            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-          }}>
-            <i className="fa-solid fa-file-pdf" style={{ color: "#fff", fontSize: "1rem" }} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+      {/* Dropdown toggle button */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
+          background: "#faf7f4", borderRadius: expanded ? "10px 10px 0 0" : 10,
+          border: "1px solid #edddd0", borderBottom: expanded ? "1px solid #edddd0" : "1px solid #edddd0",
+          color: "#2c1a0e", cursor: "pointer", textDecoration: "none",
+          fontFamily: "'Montserrat',sans-serif", fontSize: "0.82rem", fontWeight: 700,
+          transition: "all 0.2s",
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = "#f5ede3"; e.currentTarget.style.borderColor = "#d4b896"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = "#faf7f4"; e.currentTarget.style.borderColor = "#edddd0"; }}
+      >
+        <div style={{
+          width: 40, height: 40, borderRadius: 9,
+          background: "linear-gradient(135deg,#8b5e3c,#a67853)",
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        }}>
+          <i className="fa-solid fa-file-pdf" style={{ color: "#fff", fontSize: "0.9rem" }} />
+        </div>
+        <div style={{ flex: 1, textAlign: "left" }}>
+          <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "#2c1a0e" }}>
+            {files.length} Documents
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "#2c1a0e", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
-            <div style={{ fontSize: "0.65rem", color: "#a67853", marginTop: 2 }}>PDF · Click to open</div>
-          </div>
-          <i className="fa-solid fa-arrow-up-right-from-square" style={{ color: "#a67853", fontSize: "0.7rem", flexShrink: 0 }} />
-        </a>
-      ))}
+          <div style={{ fontSize: "0.65rem", color: "#a67853", marginTop: 2 }}>Click to {expanded ? "collapse" : "expand"}</div>
+        </div>
+        <i
+          className={`fa-solid fa-chevron-${expanded ? "up" : "down"}`}
+          style={{ color: "#a67853", fontSize: "0.7rem", flexShrink: 0, transition: "transform 0.2s" }}
+        />
+      </button>
+
+      {/* Expanded list */}
+      {expanded && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "10px 0", borderTop: "1px solid #edddd0" }}>
+          {files.map((f, i) => (
+            <a key={i} href={f.url} target="_blank" rel="noopener noreferrer"
+              style={{
+                display: "flex", alignItems: "center", gap: 14, padding: "12px 14px",
+                background: "#fdf8f5", borderRadius: 8,
+                color: "#2c1a0e", textDecoration: "none",
+                fontFamily: "'Montserrat',sans-serif", fontSize: "0.80rem",
+                transition: "all 0.2s",
+                marginLeft: 8,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "#f5ede3"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "#fdf8f5"; }}
+            >
+              <i className="fa-solid fa-file-pdf" style={{ color: "#a67853", fontSize: "0.85rem", flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {f.name}
+              </div>
+              <i className="fa-solid fa-arrow-up-right-from-square" style={{ color: "#a67853", fontSize: "0.65rem", flexShrink: 0 }} />
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -416,15 +481,19 @@ function RelatedProducts({ currentSlug, categories }) {
   useEffect(() => {
     if (!categories?.length) return;
     let cancelled = false;
-    try {
-      const categoryToSearch = categories[0];
-      let data = getProductsByCategory(categoryToSearch);
-      // Filter for published and visible, exclude current product
-      data = data.filter(p => p.status === "published" && p.visible !== false && p.slug !== currentSlug);
-      // Limit to 4 results
-      data = data.slice(0, 4);
-      if (!cancelled) setRelated(data);
-    } catch {}
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("products")
+          .select("id,name,slug,thumbnail,categories")
+          .eq("status", "published")
+          .eq("visible", true)
+          .neq("slug", currentSlug)
+          .contains("categories", categories.slice(0, 1))
+          .limit(4);
+        if (!cancelled && data) setRelated(data);
+      } catch {}
+    })();
     return () => { cancelled = true; };
   }, [currentSlug, categories]);
 
@@ -483,8 +552,8 @@ function RelatedProducts({ currentSlug, categories }) {
                   display: "flex", alignItems: "center", justifyContent: "center",
                   padding: 16, borderBottom: "1px solid #edddd0",
                 }}>
-                  {localOrRemote(p, 'thumbnail')
-                    ? <img src={localOrRemote(p, 'thumbnail')} alt={p.name}
+                  {p.thumbnail
+                    ? <img src={p.thumbnail} alt={p.name}
                         onError={e => { e.currentTarget.style.display = "none"; }}
                         style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
                     : <i className="fa-regular fa-image" style={{ color: "#d5b99a", fontSize: "2rem" }} />
@@ -560,18 +629,27 @@ export default function ProductPage() {
     setError(null);
     setProduct(null);
 
-    try {
-      const data = getProductBySlug(slug);
-      if (!data || data.status !== "published" || data.visible === false) {
-        if (!cancelled) setError("Product not found.");
-      } else {
-        if (!cancelled) setProduct(data);
+    (async () => {
+      try {
+        const { data, error: err } = await supabase
+          .from("products")
+          .select("*")
+          .eq("slug", slug)
+          .eq("status", "published")
+          .eq("visible", true)
+          .single();
+
+        if (err || !data) {
+          if (!cancelled) setError("Product not found.");
+        } else {
+          if (!cancelled) setProduct(data);
+        }
+      } catch {
+        if (!cancelled) setError("Connection error. Please try again.");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    } catch {
-      if (!cancelled) setError("Connection error. Please try again.");
-    } finally {
-      if (!cancelled) setLoading(false);
-    }
+    })();
 
     return () => { cancelled = true; };
   }, [slug]);
@@ -705,16 +783,23 @@ export default function ProductPage() {
             className="pp-s1-grid"
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, alignItems: "start" }}
           >
-            {/* LEFT: Carousel only (no tags/categories) */}
-            <div>
+            {/* LEFT: Carousel + Resources */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
               <Carousel
-                images={product.local_images || product.images}
-                thumbnail={localOrRemote(product, 'thumbnail')}
+                images={product.images}
+                thumbnail={product.thumbnail}
                 onImageClick={openLightbox}
               />
+              {/* Resources — below images */}
+              {hasResources && (
+                <div>
+                  <SectionLabel text="Resources" />
+                  <ResourcesPanel files={files} />
+                </div>
+              )}
             </div>
 
-            {/* RIGHT: Brand, Name, Short Desc, Features, Spec Images, Resources — top aligned */}
+            {/* RIGHT: Brand, Name, Short Desc, Features, Spec Images — top aligned */}
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               {(product.brand || product.type) && (
                 <p style={{
@@ -772,15 +857,7 @@ export default function ProductPage() {
               {hasSpec && (
                 <div>
                   <SectionLabel text="Diagram" />
-                  <CompactSpecImages images={product.local_spec_images || product.spec_images} onImageClick={openLightbox} />
-                </div>
-              )}
-
-              {/* Resources */}
-              {hasResources && (
-                <div>
-                  <SectionLabel text="Resources" />
-                  <ResourcesPanel files={files} />
+                  <CompactSpecImages images={product.spec_images} onImageClick={openLightbox} />
                 </div>
               )}
             </div>

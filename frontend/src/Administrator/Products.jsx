@@ -2,8 +2,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { supabase, cleanOrphanedStorageFiles, logActivity } from "./supabase";
 import { processPastedTableHTML } from "../utils/cleanTableHTML";
-import { getAllProductsLive, getAllCategoriesLive, getAllTagsLive, getProductByIdLive } from "../local-storage/supabaseReader";
-import UpdateLocalButton from "../local-storage/UpdateLocalButton";
+import { getAllProductsLive, getAllCategoriesLive, getAllTagsLive, getProductByIdLive, bustProductCache } from "../local-storage/supabaseReader";
 
 const FRONT_URL = process.env.REACT_APP_FRONT_URL || "";
 const STORAGE_BUCKETS = ["product-images", "product-pdf"];
@@ -1344,7 +1343,6 @@ export default function Products({ currentUser }) {
       }
 
       add(editing ? "Product saved." : "Product created.", "success");
-      add("💡 Click Update Local to sync frontend cache.", "info");
       actualClose();
       fetchProducts();
     } catch (err) { add(err.message, "error"); }
@@ -1379,7 +1377,6 @@ export default function Products({ currentUser }) {
       });
 
       add("Product and associated files deleted.", "success");
-      add("💡 Click Update Local to sync frontend cache.", "info");
     } catch (err) { add(err.message, "error"); }
     finally { fetchProducts(); }
   };
@@ -1410,7 +1407,6 @@ export default function Products({ currentUser }) {
         })
       ));
       add(`${ids.length} product(s) and their files deleted.`, "success");
-      add("💡 Click Update Local to sync frontend cache.", "info");
     } catch (err) { add(err.message, "error"); }
     finally { setSelected(new Set()); fetchProducts(); }
   };
@@ -1512,7 +1508,6 @@ export default function Products({ currentUser }) {
         >
           <i className="fa-solid fa-broom" style={{ fontSize: "0.85em" }} />
         </button>
-        <UpdateLocalButton onSyncComplete={() => { fetchProducts(); add("Cache synced. Products refreshed.", "success"); }} />
         <Btn icon="fa-plus" label="New Product" onClick={openCreate} style={{ marginLeft: "auto" }} />
       </div>
 

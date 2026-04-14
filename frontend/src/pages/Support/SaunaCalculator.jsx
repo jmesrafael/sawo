@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { getVisibleProducts } from "../../local-storage/cacheReader";
+import { getVisibleProductsCached } from "../../local-storage/supabaseReader";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function localOrRemote(product, field) {
@@ -31,6 +31,30 @@ function closestKw(targetKw, allProducts) {
   return allKws.reduce((prev, curr) =>
     Math.abs(curr - targetKw) < Math.abs(prev - targetKw) ? curr : prev
   );
+}
+
+// ─── Local cache helpers (component-level, not Supabase cache) ─────────────────
+const HC_CACHE_KEY = "sawo_hc_products";
+const HC_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+function getCached() {
+  try {
+    const stored = localStorage.getItem(HC_CACHE_KEY);
+    if (!stored) return null;
+    const { data, time } = JSON.parse(stored);
+    if (data && Date.now() - time < HC_CACHE_TTL) return data;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function setCache(data) {
+  try {
+    localStorage.setItem(HC_CACHE_KEY, JSON.stringify({ data, time: Date.now() }));
+  } catch {
+    // ignore quota errors
+  }
 }
 
 // Limit input: max 2 digits before decimal point
@@ -137,7 +161,7 @@ export default function SaunaCalculator() {
         setLoadingProducts(true);
       }
       try {
-        let data = getVisibleProducts();
+        let data = await getVisibleProductsCached();
         // Sort by sort_order first, then by created_at descending
         data.sort((a, b) => {
           const sortA = a.sort_order ?? 999;

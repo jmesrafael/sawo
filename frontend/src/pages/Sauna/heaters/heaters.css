@@ -68,6 +68,30 @@
 .wm-filter-btn:hover   { border-color: #AA8161; color: #AA8161; }
 .wm-filter-btn--active { background: #AA8161; border-color: #AA8161; color: #fff; }
 
+/* ---- Filter + Search Row (reusable layout) ---- */
+.wm-filter-search-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: nowrap;
+  /* Keeps pills and search on one row */
+}
+.wm-filter-pills-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1 1 auto;
+  /* Pills container grows and pills can wrap within it */
+  min-width: 0;
+  /* Allows flex sizing to work properly */
+}
+.wm-search-bar-fixed {
+  flex: 0 0 280px;
+  /* Fixed width search bar, doesn't shrink */
+  min-width: 200px;
+  /* Fallback minimum width on mobile */
+}
+
 /* ---- Product groups ---- */
 .wm-group { margin-bottom: 40px; }
 .wm-group-title {
