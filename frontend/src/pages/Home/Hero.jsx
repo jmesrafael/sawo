@@ -71,16 +71,18 @@ const Hero = () => {
 
   return (
     <section className="sauna-unique relative w-full min-h-[95vh] flex flex-col justify-center px-5 md:px-10 overflow-hidden">
-      <div className="absolute inset-0 -z-10">
+      <div className="absolute inset-0 -z-10" style={{ backgroundColor: "#3a3a3a" }}>
         <picture>
-          <source media="(max-width: 640px)" srcSet="/640.webp" />
-          <source media="(max-width: 1024px)" srcSet="/1024.webp" />
+          <source media="(max-width: 640px)" srcSet="/640.webp" type="image/webp" />
+          <source media="(max-width: 1024px)" srcSet="/1024.webp" type="image/webp" />
+          <source srcSet="/1920.webp" type="image/webp" />
           <img
             src="/1920.webp"
             alt="SAWO hero"
             className="w-full h-full object-cover"
             fetchPriority="high"
             decoding="async"
+            loading="eager"
           />
         </picture>
       </div>

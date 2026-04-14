@@ -2,6 +2,9 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 
+// Components
+import ScrollToTop from "./components/ScrollToTop";
+
 // Layouts
 import MainLayout  from "./layouts/MainLayout";
 import AdminLayout from "./Administrator/AdminLayout";
@@ -54,6 +57,7 @@ import ProtectedRoute from "./Administrator/ProtectedRoute";
 export default function App() {
   return (
       <Router>
+        <ScrollToTop />
         <Routes>
 
           {/*  Public  */}

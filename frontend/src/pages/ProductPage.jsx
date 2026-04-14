@@ -10,6 +10,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "../Administrator/supabase";
+import { ImageWithLoader } from "../components/ImageWithLoader";
 
 /* ── Lightbox ─────────────────────────────────────────────────────── */
 function Lightbox({ images, startIndex, onClose }) {
@@ -125,10 +126,9 @@ function Lightbox({ images, startIndex, onClose }) {
           userSelect: "none",
         }}
       >
-        <img
+        <ImageWithLoader
           src={images[idx]}
           alt=""
-          draggable={false}
           style={{
             maxWidth: "88vw", maxHeight: "88vh",
             objectFit: "contain", borderRadius: 10,
@@ -152,7 +152,11 @@ function Lightbox({ images, startIndex, onClose }) {
                 background: "rgba(0,0,0,0.4)", cursor: "pointer", padding: 0,
                 transition: "border-color 0.18s", flexShrink: 0,
               }}>
-              <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 2 }} />
+              <ImageWithLoader
+                src={url}
+                alt=""
+                style={{ width: "100%", height: "100%", objectFit: "contain", padding: 2 }}
+              />
             </button>
           ))}
         </div>
@@ -196,12 +200,24 @@ function Carousel({ images, thumbnail, onImageClick }) {
       }}
         onClick={() => onImageClick(all, idx)}
       >
-        {!err[idx] ? (
-          <img key={idx} src={all[idx]} alt=""
+        {!err[idx] && (
+          <ImageWithLoader
+            key={idx}
+            src={all[idx]}
+            alt=""
             onError={() => setErr(e => ({ ...e, [idx]: true }))}
-            style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", padding: 0, animation: "ppFadeIn 0.25s ease", width: "100%", height: "100%" }}
+            style={{
+              maxWidth: "100%",
+              maxHeight: "100%",
+              objectFit: "contain",
+              padding: 0,
+              animation: "ppFadeIn 0.25s ease",
+              width: "100%",
+              height: "100%",
+            }}
           />
-        ) : (
+        )}
+        {err[idx] && (
           <i className="fa-regular fa-image" style={{ fontSize: "2.5rem", color: "#d5b99a" }} />
         )}
 
@@ -250,10 +266,17 @@ function Carousel({ images, thumbnail, onImageClick }) {
                 border: `2px solid ${i === idx ? "#a67853" : "#edddd0"}`,
                 background: "#faf7f4", cursor: "pointer", padding: 0, transition: "border-color 0.18s",
               }}>
-              {!err[i]
-                ? <img src={url} alt="" onError={() => setErr(e => ({ ...e, [i]: true }))} style={{ width: "100%", height: "100%", objectFit: "contain", padding: 3 }} />
-                : <i className="fa-regular fa-image" style={{ color: "#d5b99a", fontSize: "1rem" }} />
-              }
+              {!err[i] && (
+                <ImageWithLoader
+                  src={url}
+                  alt=""
+                  onError={() => setErr(e => ({ ...e, [i]: true }))}
+                  style={{ width: "100%", height: "100%", objectFit: "contain", padding: 3 }}
+                />
+              )}
+              {err[i] && (
+                <i className="fa-regular fa-image" style={{ color: "#d5b99a", fontSize: "1rem" }} />
+              )}
             </button>
           ))}
         </div>
@@ -276,11 +299,10 @@ function CompactSpecImages({ images, onImageClick }) {
         cursor: "pointer",
         minHeight: 100,
       }} onClick={() => onImageClick(images, idx)}>
-        <img
+        <ImageWithLoader
           key={idx}
           src={images[idx]}
           alt=""
-          onError={e => { e.currentTarget.style.display = "none"; }}
           style={{
             width: "100%", objectFit: "contain",
             display: "block", animation: "ppFadeIn 0.2s ease",
@@ -326,7 +348,11 @@ function CompactSpecImages({ images, onImageClick }) {
                 border: `2px solid ${i === idx ? "#a67853" : "#edddd0"}`,
                 background: "transparent", cursor: "pointer", padding: 0, transition: "border-color 0.18s",
               }}>
-              <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 2 }} />
+              <ImageWithLoader
+                src={url}
+                alt=""
+                style={{ width: "100%", height: "100%", objectFit: "contain", padding: 2 }}
+              />
             </button>
           ))}
         </div>
@@ -554,12 +580,15 @@ function RelatedProducts({ currentSlug, categories }) {
                   padding: 12,
                   borderRadius: 8,
                 }}>
-                  {p.thumbnail
-                    ? <img src={p.thumbnail} alt={p.name}
-                        onError={e => { e.currentTarget.style.display = "none"; }}
-                        style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
-                    : <i className="fa-regular fa-image" style={{ color: "#d5b99a", fontSize: "2rem" }} />
-                  }
+                  {p.thumbnail ? (
+                    <ImageWithLoader
+                      src={p.thumbnail}
+                      alt={p.name}
+                      style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                    />
+                  ) : (
+                    <i className="fa-regular fa-image" style={{ color: "#d5b99a", fontSize: "2rem" }} />
+                  )}
                 </div>
 
                 {/* Name - Centered */}
@@ -632,6 +661,7 @@ export default function ProductPage() {
   const closeLightbox = () => setLightbox(null);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
     let cancelled = false;
     setLoading(true);
     setError(null);
