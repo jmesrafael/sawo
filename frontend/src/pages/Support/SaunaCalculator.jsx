@@ -2,27 +2,11 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { supabase } from "../../Administrator/supabase";
+import { getVisibleProducts } from "../../local-storage/cacheReader";
 
-// ─── Cache helpers ────────────────────────────────────────────────────────────
-const CACHE_KEY = "sawo_calc_products_v1";
-const CACHE_TS  = "sawo_calc_products_v1_ts";
-const CACHE_TTL = 5 * 60 * 1000;
-
-function getCached() {
-  try {
-    const data = localStorage.getItem(CACHE_KEY);
-    const ts   = parseInt(localStorage.getItem(CACHE_TS) || "0");
-    if (data && Date.now() - ts < CACHE_TTL) return JSON.parse(data);
-  } catch {}
-  return null;
-}
-
-function setCache(data) {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-    localStorage.setItem(CACHE_TS, Date.now().toString());
-  } catch {}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function localOrRemote(product, field) {
+  return product?.[`local_${field}`] || product?.[field] || null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -87,9 +71,9 @@ function ProductCard({ product, matchKw }) {
   return (
     <Link to={`/products/${product.slug}`} className="sawo-hc-product-card">
       <div className="sawo-hc-img-wrap">
-        {product.thumbnail ? (
+        {localOrRemote(product, 'thumbnail') ? (
           <img
-            src={product.thumbnail}
+            src={localOrRemote(product, 'thumbnail')}
             alt={product.name}
             className="sawo-hc-product-img"
             onError={e => { e.currentTarget.style.display = "none"; }}
@@ -153,14 +137,14 @@ export default function SaunaCalculator() {
         setLoadingProducts(true);
       }
       try {
-        const { data, error } = await supabase
-          .from("products")
-          .select("id,name,slug,thumbnail,categories,tags,short_description,status,visible")
-          .eq("status", "published")
-          .eq("visible", true)
-          .order("sort_order", { ascending: true })
-          .order("created_at",  { ascending: false });
-        if (error) throw error;
+        let data = getVisibleProducts();
+        // Sort by sort_order first, then by created_at descending
+        data.sort((a, b) => {
+          const sortA = a.sort_order ?? 999;
+          const sortB = b.sort_order ?? 999;
+          if (sortA !== sortB) return sortA - sortB;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
         const raw = data || [];
         setCache(raw);
         setAllProducts(raw);

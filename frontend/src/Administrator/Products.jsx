@@ -2,11 +2,17 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { supabase, cleanOrphanedStorageFiles, logActivity } from "./supabase";
 import { processPastedTableHTML } from "../utils/cleanTableHTML";
+import { getAllProductsLive, getAllCategoriesLive, getAllTagsLive, getProductByIdLive } from "../local-storage/supabaseReader";
+import UpdateLocalButton from "../local-storage/UpdateLocalButton";
 
 const FRONT_URL = process.env.REACT_APP_FRONT_URL || "";
 const STORAGE_BUCKETS = ["product-images", "product-pdf"];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+function localOrRemote(product, field) {
+  return product?.[`local_${field}`] || product?.[field] || null;
+}
+
 function slugify(str) {
   return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
@@ -1004,8 +1010,8 @@ function ProductCard({ p, onEdit, onDelete }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false); setMenuOpen(false); }}>
       <div className="product-grid-thumb">
-        {p.thumbnail
-          ? <img src={p.thumbnail} alt={p.name} />
+        {localOrRemote(p, 'thumbnail')
+          ? <img src={localOrRemote(p, 'thumbnail')} alt={p.name} />
           : <i className="fa-regular fa-image" style={{ fontSize: "1.5rem", color: "var(--border)" }} />
         }
         {hovered && (
@@ -1097,13 +1103,13 @@ export default function Products({ currentUser }) {
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
-      let q = supabase
-        .from("products")
-        .select("id,name,slug,brand,type,status,visible,featured,thumbnail,categories,tags,files,images,spec_images,created_at,updated_at,created_by_username,updated_by_username")
-        .order("created_at", { ascending: sortDir === "asc" });
-      if (filterStatus) q = q.eq("status", filterStatus);
-      const { data, error } = await q;
-      if (error) throw error;
+      let data = await getAllProductsLive();
+      if (filterStatus) data = data.filter(p => p.status === filterStatus);
+      data.sort((a, b) => {
+        const aTime = new Date(a.created_at).getTime();
+        const bTime = new Date(b.created_at).getTime();
+        return sortDir === "asc" ? aTime - bTime : bTime - aTime;
+      });
       setProducts(data || []);
       setSelected(new Set());
     } catch (err) { add(err.message, "error"); }
@@ -1111,15 +1117,17 @@ export default function Products({ currentUser }) {
   }, [filterStatus, sortDir]); // eslint-disable-line
 
   const fetchMeta = useCallback(async () => {
-    const [{ data: cats }, { data: tags }, { data: prods }] = await Promise.all([
-      supabase.from("categories").select("name"),
-      supabase.from("tags").select("name"),
-      supabase.from("products").select("type"),
-    ]);
-    setAllCats((cats || []).map(c => c.name));
-    setAllTags((tags || []).map(t => t.name));
-    const models = [...new Set((prods || []).map(p => p.type).filter(Boolean))].sort();
-    setAllModels(models);
+    try {
+      const cats = await getAllCategoriesLive();
+      const tags = await getAllTagsLive();
+      const prods = await getAllProductsLive();
+      setAllCats(cats.map(c => c.name));
+      setAllTags(tags.map(t => t.name));
+      const models = [...new Set(prods.map(p => p.type).filter(Boolean))].sort();
+      setAllModels(models);
+    } catch (err) {
+      console.error("Failed to fetch metadata:", err);
+    }
   }, []);
 
   useEffect(() => { fetchProducts(); fetchMeta(); }, [fetchProducts, fetchMeta]);
@@ -1226,8 +1234,8 @@ export default function Products({ currentUser }) {
 
   const openEdit = async row => {
     try {
-      const { data, error } = await supabase.from("products").select("*").eq("id", row.id).single();
-      if (error) throw error;
+      const data = await getProductByIdLive(row.id);
+      if (!data) throw new Error("Product not found");
       const loaded = {
         name:              data.name              || "",
         slug:              data.slug              || "",
@@ -1336,6 +1344,7 @@ export default function Products({ currentUser }) {
       }
 
       add(editing ? "Product saved." : "Product created.", "success");
+      add("💡 Click Update Local to sync frontend cache.", "info");
       actualClose();
       fetchProducts();
     } catch (err) { add(err.message, "error"); }
@@ -1347,9 +1356,8 @@ export default function Products({ currentUser }) {
     const target = confirmDel;
     setConfirmDel(null);
     try {
-      const { data: fullProduct, error: fetchErr } = await supabase
-        .from("products").select("*").eq("id", target.id).single();
-      if (fetchErr) throw fetchErr;
+      const fullProduct = await getProductByIdLive(target.id);
+      if (!fullProduct) throw new Error("Product not found");
       const { error: delErr } = await supabase.from("products").delete().eq("id", target.id);
       if (delErr) throw delErr;
       await deleteProductStorageFiles(fullProduct);
@@ -1371,6 +1379,7 @@ export default function Products({ currentUser }) {
       });
 
       add("Product and associated files deleted.", "success");
+      add("💡 Click Update Local to sync frontend cache.", "info");
     } catch (err) { add(err.message, "error"); }
     finally { fetchProducts(); }
   };
@@ -1380,9 +1389,7 @@ export default function Products({ currentUser }) {
     const ids = Array.from(selected);
     setBulkConfirm(false);
     try {
-      const { data: fullProducts, error: fetchErr } = await supabase
-        .from("products").select("*").in("id", ids);
-      if (fetchErr) throw fetchErr;
+      const fullProducts = await Promise.all(ids.map(id => getProductByIdLive(id))).then(products => products.filter(p => p));
       const { error: delErr } = await supabase.from("products").delete().in("id", ids);
       if (delErr) throw delErr;
       await Promise.allSettled((fullProducts || []).map(p => deleteProductStorageFiles(p)));
@@ -1403,6 +1410,7 @@ export default function Products({ currentUser }) {
         })
       ));
       add(`${ids.length} product(s) and their files deleted.`, "success");
+      add("💡 Click Update Local to sync frontend cache.", "info");
     } catch (err) { add(err.message, "error"); }
     finally { setSelected(new Set()); fetchProducts(); }
   };
@@ -1495,8 +1503,16 @@ export default function Products({ currentUser }) {
             <i className="fa-solid fa-trash" /> Delete {selected.size}
           </button>
         )}
-        <Btn icon="fa-broom" label="Storage" variant="ghost" size="sm"
-          onClick={() => setCleanupOpen(true)} style={{ marginLeft: 4 }} />
+        <button
+          type="button"
+          onClick={() => setCleanupOpen(true)}
+          title="Storage Cleanup — Remove orphaned files. Scans both image and PDF storage buckets to find and delete files that aren't attached to any product. Safe to run anytime."
+          className="icon-btn"
+          style={{ marginLeft: 4 }}
+        >
+          <i className="fa-solid fa-broom" style={{ fontSize: "0.85em" }} />
+        </button>
+        <UpdateLocalButton onSyncComplete={() => { fetchProducts(); add("Cache synced. Products refreshed.", "success"); }} />
         <Btn icon="fa-plus" label="New Product" onClick={openCreate} style={{ marginLeft: "auto" }} />
       </div>
 
@@ -1550,8 +1566,8 @@ export default function Products({ currentUser }) {
                       <input type="checkbox" className="tbl-checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
                     </td>
                     <td style={{ width: 44 }}>
-                      {p.thumbnail
-                        ? <img src={p.thumbnail} alt="" className="product-thumb" />
+                      {localOrRemote(p, 'thumbnail')
+                        ? <img src={localOrRemote(p, 'thumbnail')} alt="" className="product-thumb" />
                         : <div className="product-thumb-placeholder"><i className="fa-regular fa-image" /></div>
                       }
                     </td>

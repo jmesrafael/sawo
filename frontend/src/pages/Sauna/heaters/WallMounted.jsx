@@ -3,11 +3,16 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { supabase } from "../../../Administrator/supabase";
+import { getVisibleProducts } from "../../../local-storage/cacheReader";
 import ButtonClear from "../../../components/Buttons/ButtonClear";
 import CirclesInfo from "../../../components/CirclesInfo";
 import heroImg from "../../../assets/Sauna/Sauna Heaters/wall-hero.webp";
 import "./heaters.css";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function localOrRemote(product, field) {
+  return product?.[`local_${field}`] || product?.[field] || null;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ██  DISPLAY FILTER CONFIG — edit these arrays to control what shows up  ██
@@ -36,26 +41,6 @@ const DISPLAY_TAGS = [
   // "compact",
 ];
 // ─────────────────────────────────────────────────────────────────────────────
-
-const CACHE_KEY = "sawo_wm_products_v2";
-const CACHE_TS  = "sawo_wm_products_v2_ts";
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-function getCached() {
-  try {
-    const data = localStorage.getItem(CACHE_KEY);
-    const ts   = parseInt(localStorage.getItem(CACHE_TS) || "0");
-    if (data && Date.now() - ts < CACHE_TTL) return JSON.parse(data);
-  } catch {}
-  return null;
-}
-
-function setCache(data) {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-    localStorage.setItem(CACHE_TS, Date.now().toString());
-  } catch {}
-}
 
 /** Case-insensitive check: does `arr` contain any item from `targets`? */
 function arrayMatchesAny(arr = [], targets = []) {
@@ -113,9 +98,9 @@ function ProductCard({ product }) {
         onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.04)"; }}
         onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
       >
-        {product.thumbnail ? (
+        {localOrRemote(product, 'thumbnail') ? (
           <img
-            src={product.thumbnail}
+            src={localOrRemote(product, 'thumbnail')}
             alt={product.name}
             className="wm-product-img"
             onError={e => { e.currentTarget.style.display = "none"; }}
@@ -132,13 +117,8 @@ function ProductCard({ product }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function WallMounted() {
-  const [allProducts, setAllProducts] = useState(() => {
-    // Seed from cache so grid appears instantly on revisit
-    const cached = getCached();
-    return cached ? applyDisplayFilter(cached) : [];
-  });
-  const [loading,  setLoading]  = useState(allProducts.length === 0);
-  const [syncing,  setSyncing]  = useState(false);
+  const [allProducts, setAllProducts] = useState([]);
+  const [loading,  setLoading]  = useState(true);
   const [offline,  setOffline]  = useState(!navigator.onLine);
 
   // Search query for the displayed grid
@@ -159,39 +139,22 @@ export default function WallMounted() {
   // ── Initial fetch ────────────────────────────────────────────────────────
   useEffect(() => { fetchProducts(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Supabase fetch ───────────────────────────────────────────────────────
-  async function fetchProducts(force = false) {
-    const cached = getCached();
-
-    if (cached && !force) {
-      // Show cached data immediately, but still refresh in background
-      setAllProducts(applyDisplayFilter(cached));
-      setLoading(false);
-      setSyncing(true);
-    } else if (!cached) {
-      setLoading(true);
-    }
-
+  // ── Fetch from local cache ───────────────────────────────────────────────
+  function fetchProducts() {
     try {
-      const { data, error } = await supabase
-        .from("products")
-        .select("id,name,slug,thumbnail,categories,tags,short_description,status,visible")
-        .eq("status", "published")
-        .eq("visible", true)
-        .order("sort_order", { ascending: true })
-        .order("created_at",  { ascending: false });
-
-      if (error) throw error;
-
-      const raw = data || [];
-      setCache(raw);
-      setAllProducts(applyDisplayFilter(raw));
+      let data = getVisibleProducts();
+      // Sort by sort_order first, then by created_at descending
+      data.sort((a, b) => {
+        const sortA = a.sort_order ?? 999;
+        const sortB = b.sort_order ?? 999;
+        if (sortA !== sortB) return sortA - sortB;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+      setAllProducts(applyDisplayFilter(data));
     } catch (err) {
-      console.error("WallMounted: Supabase fetch failed", err);
-      // Keep whatever we already have in state
+      console.error("WallMounted: fetch failed", err);
     } finally {
       setLoading(false);
-      setSyncing(false);
     }
   }
 
@@ -302,12 +265,6 @@ export default function WallMounted() {
         <div style={{ background: "#FEF5EC", borderTop: "1px solid #F5D5A0", borderBottom: "1px solid #F5D5A0", padding: "8px 24px", textAlign: "center", fontFamily: "'Montserrat', sans-serif", fontSize: "0.78rem", color: "#9C6A10" }}>
           <i className="fa-solid fa-wifi" style={{ marginRight: 6, opacity: 0.6 }} />
           You are offline — showing last saved data
-        </div>
-      )}
-      {syncing && !offline && (
-        <div style={{ background: "#EBF5FB", borderTop: "1px solid #C5DDF0", borderBottom: "1px solid #C5DDF0", padding: "6px 24px", textAlign: "center", fontFamily: "'Montserrat', sans-serif", fontSize: "0.75rem", color: "#1A6A9A" }}>
-          <i className="fa-solid fa-rotate" style={{ marginRight: 6 }} />
-          Refreshing products…
         </div>
       )}
 

@@ -9,7 +9,12 @@
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { supabase } from "../Administrator/supabase";
+import { getProductBySlug, getProductsByCategory } from "../local-storage/cacheReader";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function localOrRemote(product, field) {
+  return product?.[`local_${field}`] || product?.[field] || null;
+}
 
 /* ── Lightbox ─────────────────────────────────────────────────────── */
 function Lightbox({ images, startIndex, onClose }) {
@@ -351,7 +356,7 @@ function ResourcesPanel({ files }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {files.map((f, i) => (
-        <a key={i} href={f.url} target="_blank" rel="noopener noreferrer"
+        <a key={i} href={f.local_path || f.url} target="_blank" rel="noopener noreferrer"
           style={{
             display: "flex", alignItems: "center", gap: 14, padding: "14px 16px",
             background: "#faf7f4", borderRadius: 10, border: "1px solid #edddd0",
@@ -411,19 +416,15 @@ function RelatedProducts({ currentSlug, categories }) {
   useEffect(() => {
     if (!categories?.length) return;
     let cancelled = false;
-    (async () => {
-      try {
-        const { data } = await supabase
-          .from("products")
-          .select("id,name,slug,thumbnail,categories")
-          .eq("status", "published")
-          .eq("visible", true)
-          .neq("slug", currentSlug)
-          .contains("categories", categories.slice(0, 1))
-          .limit(4);
-        if (!cancelled && data) setRelated(data);
-      } catch {}
-    })();
+    try {
+      const categoryToSearch = categories[0];
+      let data = getProductsByCategory(categoryToSearch);
+      // Filter for published and visible, exclude current product
+      data = data.filter(p => p.status === "published" && p.visible !== false && p.slug !== currentSlug);
+      // Limit to 4 results
+      data = data.slice(0, 4);
+      if (!cancelled) setRelated(data);
+    } catch {}
     return () => { cancelled = true; };
   }, [currentSlug, categories]);
 
@@ -482,8 +483,8 @@ function RelatedProducts({ currentSlug, categories }) {
                   display: "flex", alignItems: "center", justifyContent: "center",
                   padding: 16, borderBottom: "1px solid #edddd0",
                 }}>
-                  {p.thumbnail
-                    ? <img src={p.thumbnail} alt={p.name}
+                  {localOrRemote(p, 'thumbnail')
+                    ? <img src={localOrRemote(p, 'thumbnail')} alt={p.name}
                         onError={e => { e.currentTarget.style.display = "none"; }}
                         style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
                     : <i className="fa-regular fa-image" style={{ color: "#d5b99a", fontSize: "2rem" }} />
@@ -559,27 +560,18 @@ export default function ProductPage() {
     setError(null);
     setProduct(null);
 
-    (async () => {
-      try {
-        const { data, error: err } = await supabase
-          .from("products")
-          .select("*")
-          .eq("slug", slug)
-          .eq("status", "published")
-          .eq("visible", true)
-          .single();
-
-        if (err || !data) {
-          if (!cancelled) setError("Product not found.");
-        } else {
-          if (!cancelled) setProduct(data);
-        }
-      } catch {
-        if (!cancelled) setError("Connection error. Please try again.");
-      } finally {
-        if (!cancelled) setLoading(false);
+    try {
+      const data = getProductBySlug(slug);
+      if (!data || data.status !== "published" || data.visible === false) {
+        if (!cancelled) setError("Product not found.");
+      } else {
+        if (!cancelled) setProduct(data);
       }
-    })();
+    } catch {
+      if (!cancelled) setError("Connection error. Please try again.");
+    } finally {
+      if (!cancelled) setLoading(false);
+    }
 
     return () => { cancelled = true; };
   }, [slug]);
@@ -716,8 +708,8 @@ export default function ProductPage() {
             {/* LEFT: Carousel only (no tags/categories) */}
             <div>
               <Carousel
-                images={product.images}
-                thumbnail={product.thumbnail}
+                images={product.local_images || product.images}
+                thumbnail={localOrRemote(product, 'thumbnail')}
                 onImageClick={openLightbox}
               />
             </div>
@@ -780,7 +772,7 @@ export default function ProductPage() {
               {hasSpec && (
                 <div>
                   <SectionLabel text="Diagram" />
-                  <CompactSpecImages images={product.spec_images} onImageClick={openLightbox} />
+                  <CompactSpecImages images={product.local_spec_images || product.spec_images} onImageClick={openLightbox} />
                 </div>
               )}
 

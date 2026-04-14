@@ -13,6 +13,11 @@
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.13.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "fs-extra": "^11.3.4",
+    "http-proxy-middleware": "^2.0.6",
     "lucide-react": "^0.548.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -24,7 +29,11 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "cache": "node src/local-storage/fetchProducts.mjs",
+    "cache:full": "node src/local-storage/fetchProducts.mjs --full",
+    "devserver": "node src/local-storage/devServer.mjs",
+    "dev": "concurrently \"npm start\" \"node src/local-storage/devServer.mjs\""
   },
   "eslintConfig": {
     "extends": [
@@ -50,6 +59,7 @@
   },
   "devDependencies": {
     "autoprefixer": "^10.4.24",
+    "concurrently": "^8.2.2",
     "postcss": "^8.5.6",
     "stylelint": "^17.2.0",
     "stylelint-config-standard": "^40.0.0",

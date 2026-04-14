@@ -5,7 +5,12 @@
 // and see all products within that model.
 //
 import React, { useEffect, useState } from "react";
-import { supabase } from "./supabase";
+import { getAllProductsLive } from "../local-storage/supabaseReader";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function localOrRemote(product, field) {
+  return product?.[`local_${field}`] || product?.[field] || null;
+}
 
 // ─── Status Badge ─────────────────────────────────────────────────────────
 function StatusBadge({ status, visible, featured }) {
@@ -70,8 +75,8 @@ function ProductCard({ product }) {
         borderRadius: "var(--r-sm)", overflow: "hidden", display: "flex",
         alignItems: "center", justifyContent: "center",
       }}>
-        {product.thumbnail ? (
-          <img src={product.thumbnail} alt={product.name} style={{
+        {localOrRemote(product, 'thumbnail') ? (
+          <img src={localOrRemote(product, 'thumbnail')} alt={product.name} style={{
             width: "100%", height: "100%", objectFit: "cover",
           }} />
         ) : (
@@ -156,13 +161,13 @@ export default function Models() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: qErr } = await supabase
-        .from("products")
-        .select("id, name, slug, type, thumbnail, status, visible, featured")
-        .order("type", { ascending: true })
-        .order("name", { ascending: true });
-
-      if (qErr) throw qErr;
+      let data = await getAllProductsLive();
+      // Sort by type then by name
+      data.sort((a, b) => {
+        const typeCompare = (a.type || "").localeCompare(b.type || "");
+        if (typeCompare !== 0) return typeCompare;
+        return (a.name || "").localeCompare(b.name || "");
+      });
       setProducts(data || []);
     } catch (err) {
       setError(err.message);

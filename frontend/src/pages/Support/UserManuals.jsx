@@ -1,27 +1,11 @@
 ﻿// src/pages/Support/UserManuals.jsx
 
 import React, { useState, useEffect, useMemo } from "react";
-import { supabase } from "../../Administrator/supabase";
+import { getVisibleProducts } from "../../local-storage/cacheReader";
 
-// ─── Cache helpers ────────────────────────────────────────────────────────────
-const CACHE_KEY = "sawo_manuals_products_v1";
-const CACHE_TS  = "sawo_manuals_products_v1_ts";
-const CACHE_TTL = 5 * 60 * 1000;
-
-function getCached() {
-  try {
-    const data = localStorage.getItem(CACHE_KEY);
-    const ts   = parseInt(localStorage.getItem(CACHE_TS) || "0");
-    if (data && Date.now() - ts < CACHE_TTL) return JSON.parse(data);
-  } catch {}
-  return null;
-}
-
-function setCache(data) {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-    localStorage.setItem(CACHE_TS, Date.now().toString());
-  } catch {}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function localOrRemote(product, field) {
+  return product?.[`local_${field}`] || product?.[field] || null;
 }
 
 // ─── PDF Modal ────────────────────────────────────────────────────────────────
@@ -250,9 +234,9 @@ function ProductCard({ product, onOpenManuals }) {
         display: "flex", alignItems: "center", justifyContent: "center",
         padding: 8, position: "relative", overflow: "hidden",
       }}>
-        {product.thumbnail ? (
+        {localOrRemote(product, 'thumbnail') ? (
           <img
-            src={product.thumbnail}
+            src={localOrRemote(product, 'thumbnail')}
             alt={product.name}
             onError={e => { e.currentTarget.style.display = "none"; }}
             style={{
@@ -330,32 +314,23 @@ function ProductCard({ product, onOpenManuals }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function UserManuals() {
-  const [allProducts, setAllProducts] = useState(() => getCached() || []);
-  const [loading,     setLoading]     = useState(allProducts.length === 0);
+  const [allProducts, setAllProducts] = useState([]);
+  const [loading,     setLoading]     = useState(true);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    async function fetchProducts() {
-      const cached = getCached();
-      if (cached) {
-        setAllProducts(cached);
-        setLoading(false);
-      } else {
-        setLoading(true);
-      }
+    function fetchProducts() {
       try {
-        const { data, error } = await supabase
-          .from("products")
-          .select("id,name,slug,thumbnail,categories,tags,short_description,files,status,visible")
-          .eq("status", "published")
-          .eq("visible", true)
-          .order("sort_order", { ascending: true })
-          .order("created_at",  { ascending: false });
-        if (error) throw error;
-        const raw = data || [];
-        setCache(raw);
-        setAllProducts(raw);
+        let data = getVisibleProducts();
+        // Sort by sort_order first, then by created_at descending
+        data.sort((a, b) => {
+          const sortA = a.sort_order ?? 999;
+          const sortB = b.sort_order ?? 999;
+          if (sortA !== sortB) return sortA - sortB;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
+        setAllProducts(data);
       } catch (err) {
         console.error("UserManuals: fetch failed", err);
       } finally {

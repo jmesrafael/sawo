@@ -21,3 +21,7 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# local cache (auto-generated)
+/src/local-storage/data/
+/src/local-storage/files/

@@ -1,0 +1,156 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                         UPDATED BUTTON TOOLTIPS                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+
+🔄 UPDATE LOCAL BUTTON (Rotate Icon)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Hover to see:
+  ┌──────────────────────────────────────────────────────────────────┐
+  │ Update Local Cache — Syncs only changed products. Fast and       │
+  │ efficient. Use this after editing or creating products.          │
+  └──────────────────────────────────────────────────────────────────┘
+
+  What it does:
+    ✅ Compares Supabase with local cache
+    ✅ Only syncs changed/new/deleted products
+    ✅ Updates local JSON files
+    ✅ Works in seconds
+
+  When to use:
+    • After editing a product
+    • After creating a new product
+    • After deleting a product
+    • After changing categories/tags
+    • Most common operation
+
+
+⬇️  FULL REFRESH BUTTON (Download Icon)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Hover to see:
+  ┌──────────────────────────────────────────────────────────────────┐
+  │ Full Refresh Cache — Deletes all cached data and re-downloads    │
+  │ everything from Supabase. Use this if cache seems outdated or    │
+  │ corrupted.                                                        │
+  └──────────────────────────────────────────────────────────────────┘
+
+  What it does:
+    ✅ Wipes entire local cache
+    ✅ Re-downloads ALL data from Supabase
+    ✅ Rebuilds all JSON files from scratch
+    ✅ Fixes stale/corrupted cache
+
+  When to use:
+    • Cache seems outdated
+    • Data looks wrong
+    • After major bulk operations
+    • Before important deployments
+    • Troubleshooting issues
+
+
+🧹 STORAGE CLEANUP BUTTON
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Hover to see:
+  ┌──────────────────────────────────────────────────────────────────┐
+  │ Storage Cleanup — Remove orphaned files. Scans both image and    │
+  │ PDF storage buckets to find and delete files that aren't attached│
+  │ to any product. Safe to run anytime.                             │
+  └──────────────────────────────────────────────────────────────────┘
+
+  What it does:
+    ✅ Scans product-images bucket
+    ✅ Scans product-pdf bucket
+    ✅ Finds files NOT used by any product
+    ✅ Deletes orphaned files
+    ✅ Frees storage space
+
+  When to use:
+    • After deleting products
+    • After removing images
+    • Monthly maintenance
+    • Storage is full
+    • Before checking storage costs
+
+  What gets deleted:
+    ✅ Files from deleted products
+    ✅ Uploaded but never used images
+    ✅ Old images replaced in products
+
+  What's safe:
+    ✅ All products stay intact
+    ✅ Only removes unused files
+    ✅ Can preview with "Dry Run"
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                            HOW USERS SEE IT                               ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+Products Toolbar:
+┌────────────────────────────────────────────────────────────────────────┐
+│ [Search] [Filter] [View] [🧹] [↻] [⬇️] [➕ New Product]              │
+│                              ↑  ↑  ↑                                   │
+│                              │  │  └─ Full Refresh (hover for tooltip) │
+│                              │  └──── Update Local (hover for tooltip) │
+│                              └─────── Storage Cleanup (hover tooltip)  │
+└────────────────────────────────────────────────────────────────────────┘
+
+User hovers over button → Tooltip appears with detailed explanation
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                         TOOLTIP COMPARISON                                ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+BEFORE (Old):
+  ↻ "Update Local — sync only what changed"
+  ⬇️ "Full re-download — wipes and re-fetches everything"
+  🧹 "Clean up orphaned files from storage"
+
+AFTER (New - Detailed):
+  ↻ "Update Local Cache — Syncs only changed products. Fast and efficient.
+     Use this after editing or creating products."
+
+  ⬇️ "Full Refresh Cache — Deletes all cached data and re-downloads
+     everything from Supabase. Use this if cache seems outdated or corrupted."
+
+  🧹 "Storage Cleanup — Remove orphaned files. Scans both image and PDF
+     storage buckets to find and delete files that aren't attached to any
+     product. Safe to run anytime."
+
+
+KEY IMPROVEMENTS:
+
+✨ More descriptive - Explains WHAT and WHY
+✨ Use cases - Tells user WHEN to use each button
+✨ Reassuring - Explains safety ("Safe to run anytime")
+✨ Educational - Helps users understand the system
+✨ Easy to understand - No jargon, plain language
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                      DOCUMENTATION PROVIDED                               ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+For more detailed information, users can read:
+  📖 TOOLBAR_BUTTONS_GUIDE.md - Complete guide with examples
+  📖 Products toolbar has context help
+  📖 Storage cleanup modal has full explanation
+
+
+QUICK DECISION TREE:
+
+  Made edits to products?
+    ↓ YES → Click Update Local ↻
+    ↓ NO
+
+  Cache looks wrong or old?
+    ↓ YES → Click Full Refresh ⬇️
+    ↓ NO
+
+  Storage getting full?
+    ↓ YES → Click Storage Cleanup 🧹
+    ↓ NO → You're good! ✅

@@ -2,7 +2,12 @@
 // Read-only Products grid view for viewer role users
 import React, { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { supabase } from "./supabase";
+import { getVisibleProductsLive, searchProductsLive } from "../local-storage/supabaseReader";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function localOrRemote(product, field) {
+  return product?.[`local_${field}`] || product?.[field] || null;
+}
 
 export default function Viewer() {
   const [products, setProducts] = useState([]);
@@ -14,19 +19,11 @@ export default function Viewer() {
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
-      let q = supabase
-        .from("products")
-        .select("id,name,slug,brand,type,status,visible,thumbnail,featured")
-        .eq("status", "published")
-        .eq("visible", true)
-        .order("created_at", { ascending: false });
-
-      if (search) {
-        q = q.ilike("name", `%${search}%`);
-      }
-
-      const { data, error } = await q;
-      if (error) throw error;
+      let data = search ? await searchProductsLive(search) : await getVisibleProductsLive();
+      // Filter to ensure only published and visible
+      data = data.filter(p => p.status === "published" && p.visible !== false);
+      // Sort by created_at descending
+      data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setProducts(data || []);
     } catch (err) {
       console.error("Failed to fetch products:", err);
@@ -131,9 +128,9 @@ export default function Viewer() {
                 justifyContent: "center",
                 position: "relative",
               }}>
-                {p.thumbnail ? (
+                {localOrRemote(p, 'thumbnail') ? (
                   <img
-                    src={p.thumbnail}
+                    src={localOrRemote(p, 'thumbnail')}
                     alt={p.name}
                     style={{
                       width: "100%",

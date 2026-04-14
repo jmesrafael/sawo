@@ -1,6 +1,12 @@
 // src/Administrator/Taxonomy.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "./supabase";
+import { getAllProductsLive } from "../local-storage/supabaseReader";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function localOrRemote(product, field) {
+  return product?.[`local_${field}`] || product?.[field] || null;
+}
 
 function slugify(str) {
   return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -30,11 +36,22 @@ function TermProductsModal({ open, onClose, term, field }) {
   useEffect(() => {
     if (!open || !term) return;
     setLoading(true);
-    supabase
-      .from("products")
-      .select("id,name,thumbnail,status,categories,tags")
-      .contains(field, [term])
-      .then(({ data }) => { setProducts(data || []); setLoading(false); });
+    (async () => {
+      try {
+        const allProducts = await getAllProductsLive();
+        // Filter products that contain the term in the specified field
+        const filtered = allProducts.filter(p => {
+          const fieldArray = p[field] || [];
+          return Array.isArray(fieldArray) && fieldArray.includes(term);
+        });
+        setProducts(filtered);
+      } catch (err) {
+        console.error("Failed to fetch products for term:", err);
+        setProducts([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [open, term, field]);
 
   return (
@@ -47,8 +64,8 @@ function TermProductsModal({ open, onClose, term, field }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {products.map(p => (
             <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", background: "var(--surface-2)", borderRadius: "var(--r-sm)", border: "1px solid var(--border)" }}>
-              {p.thumbnail
-                ? <img src={p.thumbnail} alt="" style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", border: "1px solid var(--border)", flexShrink: 0 }} />
+              {localOrRemote(p, 'thumbnail')
+                ? <img src={localOrRemote(p, 'thumbnail')} alt="" style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", border: "1px solid var(--border)", flexShrink: 0 }} />
                 : <div style={{ width: 40, height: 40, borderRadius: 6, background: "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><i className="fa-regular fa-image" style={{ color: "var(--text-3)" }} /></div>
               }
               <span style={{ fontFamily: "var(--font)", fontWeight: 600, fontSize: 14, color: "rgb(20,22,23)" }}>{p.name}</span>
@@ -240,23 +257,28 @@ function TaxTab({ table, label, hasDescription }) {
 
   const fetchData = async () => {
     setLoading(true);
-    const { data: termData } = await supabase.from(table).select("*").order("name");
-    const terms = termData || [];
-    setItems(terms);
+    try {
+      const { data: termData } = await supabase.from(table).select("*").order("name");
+      const terms = termData || [];
+      setItems(terms);
 
-    // Build product counts in one query
-    const { data: products } = await supabase.from("products").select(`id,${field}`);
-    const counts = {};
-    terms.forEach(t => { counts[t.id] = 0; });
-    (products || []).forEach(p => {
-      (p[field] || []).forEach(termName => {
-        const found = terms.find(t => t.name === termName);
-        if (found) counts[found.id] = (counts[found.id] || 0) + 1;
+      // Build product counts using live data
+      const products = await getAllProductsLive();
+      const counts = {};
+      terms.forEach(t => { counts[t.id] = 0; });
+      (products || []).forEach(p => {
+        (p[field] || []).forEach(termName => {
+          const found = terms.find(t => t.name === termName);
+          if (found) counts[found.id] = (counts[found.id] || 0) + 1;
+        });
       });
-    });
-    setProductCounts(counts);
-    setSelected(new Set());
-    setLoading(false);
+      setProductCounts(counts);
+      setSelected(new Set());
+    } catch (err) {
+      console.error("Failed to fetch data:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchData(); }, [table]); // eslint-disable-line
