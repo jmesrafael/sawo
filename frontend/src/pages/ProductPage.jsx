@@ -521,36 +521,38 @@ function RelatedProducts({ currentSlug, categories }) {
 
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))",
-          gap: 20,
+          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+          gap: 24,
         }}>
           {related.map(p => (
             <Link
               key={p.id || p.slug}
               to={`/products/${p.slug}`}
-              style={{ textDecoration: "none" }}
+              style={{ textDecoration: "none", cursor: "pointer" }}
             >
               <div
                 style={{
-                  background: "#fff", borderRadius: 12, border: "1px solid #edddd0",
-                  overflow: "hidden", transition: "all 0.25s ease",
-                  display: "flex", flexDirection: "column",
+                  display: "flex", flexDirection: "column", gap: 12,
+                  transition: "all 0.25s ease",
+                  padding: 12,
+                  borderRadius: 12,
+                  border: "2px solid transparent",
                 }}
                 onMouseEnter={e => {
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                  e.currentTarget.style.borderColor = "#c4a882";
-                  e.currentTarget.style.boxShadow = "0 8px 28px rgba(139,94,60,0.12)";
+                  e.currentTarget.style.border = "2px solid #a67853";
+                  e.currentTarget.style.background = "rgba(246, 242, 237, 0.5)";
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.borderColor = "#edddd0";
-                  e.currentTarget.style.boxShadow = "none";
+                  e.currentTarget.style.border = "2px solid transparent";
+                  e.currentTarget.style.background = "transparent";
                 }}
               >
+                {/* Image */}
                 <div style={{
-                  aspectRatio: "1/1", background: "#faf7f4",
+                  aspectRatio: "1/1",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  padding: 16, borderBottom: "1px solid #edddd0",
+                  padding: 12,
+                  borderRadius: 8,
                 }}>
                   {p.thumbnail
                     ? <img src={p.thumbnail} alt={p.name}
@@ -559,33 +561,15 @@ function RelatedProducts({ currentSlug, categories }) {
                     : <i className="fa-regular fa-image" style={{ color: "#d5b99a", fontSize: "2rem" }} />
                   }
                 </div>
-                <div style={{ padding: "14px 16px 16px", flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                  {p.categories?.[0] && (
-                    <span style={{
-                      fontFamily: "'Montserrat',sans-serif", fontSize: "0.62rem",
-                      fontWeight: 700, color: "#a67853", letterSpacing: "0.07em",
-                      textTransform: "uppercase",
-                    }}>
-                      {p.categories[0]}
-                    </span>
-                  )}
-                  <p style={{
-                    fontFamily: "'Montserrat',sans-serif", fontWeight: 700,
-                    fontSize: "0.82rem", color: "#2c1a0e", margin: 0, lineHeight: 1.4,
-                  }}>
-                    {p.name}
-                  </p>
-                  {/* short_description removed */}
-                  <div style={{ marginTop: "auto", paddingTop: 10 }}>
-                    <span style={{
-                      fontFamily: "'Montserrat',sans-serif", fontSize: "0.72rem",
-                      fontWeight: 700, color: "#8b5e3c",
-                      display: "inline-flex", alignItems: "center", gap: 4,
-                    }}>
-                      View product <i className="fa-solid fa-arrow-right" style={{ fontSize: "0.6rem" }} />
-                    </span>
-                  </div>
-                </div>
+
+                {/* Name - Centered */}
+                <p style={{
+                  fontFamily: "'Montserrat',sans-serif", fontWeight: 700,
+                  fontSize: "0.82rem", color: "#2c1a0e", margin: 0, lineHeight: 1.4,
+                  textAlign: "center",
+                }}>
+                  {p.name}
+                </p>
               </div>
             </Link>
           ))}
@@ -610,6 +594,30 @@ function SkeletonPage() {
       </div>
     </div>
   );
+}
+
+/* ── Utility: Clean inline styles from HTML ────────────────────────── */
+function cleanHTMLStyles(html) {
+  const temp = document.createElement("div");
+  temp.innerHTML = html;
+
+  // Remove all style attributes from all elements, but preserve br tags
+  const allElements = temp.querySelectorAll("*");
+  allElements.forEach(el => {
+    // Keep br tags without any attributes
+    if (el.tagName === "BR") {
+      el.removeAttribute("style");
+      return;
+    }
+    el.removeAttribute("style");
+  });
+
+  // Ensure proper spacing between paragraphs
+  let result = temp.innerHTML;
+  // Add margin-bottom to paragraphs for spacing
+  result = result.replace(/<p>/g, '<p margin-top: 0;">');
+
+  return result;
 }
 
 /* ── Main ─────────────────────────────────────────────────────────── */
@@ -710,6 +718,7 @@ export default function ProductPage() {
           font-family: 'Montserrat', sans-serif;
           font-size: 0.78rem;
           background-color: #fff;
+          border: 1px solid #d5b99a;
         }
 
         table th {
@@ -783,15 +792,15 @@ export default function ProductPage() {
             className="pp-s1-grid"
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, alignItems: "start" }}
           >
-            {/* LEFT: Carousel + Resources */}
+            {/* LEFT: Carousel + Resources (only if Diagram exists) */}
             <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
               <Carousel
                 images={product.images}
                 thumbnail={product.thumbnail}
                 onImageClick={openLightbox}
               />
-              {/* Resources — below images */}
-              {hasResources && (
+              {/* Resources — below images (only show on left if Diagram exists) */}
+              {hasResources && hasSpec && (
                 <div>
                   <SectionLabel text="Resources" />
                   <ResourcesPanel files={files} />
@@ -820,12 +829,14 @@ export default function ProductPage() {
 
               {hasShortDesc && (
                 <div style={{ paddingBottom: 16, borderBottom: "1px solid #edddd0", textAlign: "left" }}>
-                  <p style={{
-                    fontFamily: "'Montserrat',sans-serif", fontSize: "0.82rem",
-                    color: "#7a5c45", lineHeight: 1.6, margin: 0,
-                  }}>
-                    {product.short_description}
-                  </p>
+                  <div
+                    style={{
+                      fontFamily: "'Montserrat',sans-serif", fontSize: "0.82rem",
+                      color: "#7a5c45", lineHeight: 1.6, margin: 0,
+                      whiteSpace: "pre-wrap", wordWrap: "break-word",
+                    }}
+                    dangerouslySetInnerHTML={{ __html: cleanHTMLStyles(product.short_description) }}
+                  />
                 </div>
               )}
 
@@ -860,6 +871,14 @@ export default function ProductPage() {
                   <CompactSpecImages images={product.spec_images} onImageClick={openLightbox} />
                 </div>
               )}
+
+              {/* Resources — on right side if no Diagram */}
+              {hasResources && !hasSpec && (
+                <div>
+                  <SectionLabel text="Resources" />
+                  <ResourcesPanel files={files} />
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -882,8 +901,9 @@ export default function ProductPage() {
                       fontFamily: "'Montserrat',sans-serif", color: "#5a4030",
                       lineHeight: 1.7, fontSize: "0.82rem",
                       maxWidth: "100%",
+                      whiteSpace: "pre-wrap", wordWrap: "break-word",
                     }}
-                    dangerouslySetInnerHTML={{ __html: product.description }}
+                    dangerouslySetInnerHTML={{ __html: cleanHTMLStyles(product.description) }}
                   />
                 </div>
               )}
@@ -892,7 +912,7 @@ export default function ProductPage() {
               {hasSpecTable && (
                 <div>
                   <h4 style={{ fontFamily: "'Montserrat',sans-serif", fontSize: "0.78rem", fontWeight: 700, color: "#8b5e3c", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.07em" }}>Technical Data</h4>
-                  <div style={{ overflowX: "auto", borderRadius: 10, border: "1px solid #edddd0" }}>
+                  <div style={{ overflowX: "auto", borderRadius: 10, border: "2px solid #d5b99a", background: "#fafaf8" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Montserrat',sans-serif", fontSize: "0.8rem" }}>
                       <thead>
                         <tr style={{ background: "#faf7f4" }}>

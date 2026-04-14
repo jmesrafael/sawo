@@ -287,23 +287,118 @@ function Field({ label, type = "text", value, onChange, placeholder, required, h
 function RichField({ label, value, onChange, rows = 6, onNotify }) {
   const [mode, setMode] = useState("text");
   const textareaRef = useRef(null);
+  const editorRef = useRef(null);
+
+  const cleanPastedHTML = (html) => {
+    const temp = document.createElement("div");
+    temp.innerHTML = html;
+
+    // Remove comments and unwanted elements
+    const comments = temp.querySelectorAll("*");
+    comments.forEach(el => {
+      if (el.nodeType === 8) el.remove(); // Remove comments
+    });
+
+    // Process all elements
+    const allElements = temp.querySelectorAll("*");
+    allElements.forEach(el => {
+      // Keep only semantic tags
+      const allowedTags = ["P", "DIV", "BR", "B", "STRONG", "I", "EM", "U", "H1", "H2", "H3", "H4", "H5", "H6", "OL", "UL", "LI", "TABLE", "THEAD", "TBODY", "TR", "TH", "TD", "SPAN"];
+
+      if (!allowedTags.includes(el.tagName)) {
+        // Replace non-allowed tags with their content
+        const parent = el.parentNode;
+        while (el.firstChild) {
+          parent.insertBefore(el.firstChild, el);
+        }
+        parent.removeChild(el);
+      } else {
+        // Extract text-align value before removing attributes
+        const oldStyle = el.getAttribute("style") || "";
+        const alignMatch = oldStyle.match(/text-align:\s*(left|center|right|justify)/);
+
+        // Remove all attributes
+        Array.from(el.attributes).forEach(attr => {
+          el.removeAttribute(attr.name);
+        });
+
+        // Only restore text-align if it existed
+        if (alignMatch) {
+          el.setAttribute("style", `text-align: ${alignMatch[1]};`);
+        }
+      }
+    });
+
+    // Convert &nbsp; to regular spaces for cleaner output
+    let result = temp.innerHTML;
+    result = result.replace(/&nbsp;/g, " ");
+    result = result.replace(/<!--.*?-->/g, ""); // Remove any remaining comments
+
+    return result;
+  };
 
   const handlePaste = (e) => {
-    if (mode !== "html") return;
-    const pastedText = e.clipboardData.getData("text/html") || e.clipboardData.getData("text/plain");
-    if (pastedText && pastedText.includes("<table")) {
-      e.preventDefault();
-      const cleaned = processPastedTableHTML(pastedText);
-      const textarea = textareaRef.current;
-      const start = textarea.selectionStart;
-      const end   = textarea.selectionEnd;
-      const newValue = value.substring(0, start) + cleaned + value.substring(end);
-      onChange({ target: { value: newValue } });
+    if (e.target !== editorRef.current) return; // Only handle paste on contenteditable editor
+
+    const html = e.clipboardData.getData("text/html");
+    const text = e.clipboardData.getData("text/plain");
+    if (!html && !text) return;
+
+    e.preventDefault();
+
+    let contentToInsert = html || text;
+
+    // Clean and process the pasted content
+    if (contentToInsert.includes("<table")) {
+      contentToInsert = processPastedTableHTML(contentToInsert);
       if (onNotify) onNotify("✓ Table cleaned and formatted! kW tags will be auto-extracted on Save.", "success");
-      setTimeout(() => {
-        textarea.selectionStart = textarea.selectionEnd = start + cleaned.length;
-        textarea.focus();
-      }, 0);
+    } else if (contentToInsert.includes("<")) {
+      // Clean HTML paste: remove inline styles
+      contentToInsert = cleanPastedHTML(contentToInsert);
+    }
+
+    // Use execCommand to insert the cleaned HTML
+    document.execCommand("insertHTML", false, contentToInsert);
+
+    // Update the form state
+    setTimeout(() => {
+      if (editorRef.current) {
+        onChange({ target: { value: editorRef.current.innerHTML } });
+        autoExpandEditor();
+      }
+    }, 0);
+  };
+
+  const execCommand = (cmd, value = null) => {
+    document.execCommand(cmd, false, value);
+    editorRef.current?.focus();
+  };
+
+  const handleEditorChange = () => {
+    if (editorRef.current) {
+      onChange({ target: { value: editorRef.current.innerHTML } });
+      autoExpandEditor();
+    }
+  };
+
+  const autoExpandEditor = () => {
+    if (editorRef.current) {
+      editorRef.current.style.height = "auto";
+      const scrollHeight = editorRef.current.scrollHeight;
+      editorRef.current.style.height = Math.max(150, scrollHeight + 4) + "px";
+    }
+  };
+
+  const syncFromTextarea = () => {
+    if (editorRef.current && textareaRef.current) {
+      editorRef.current.innerHTML = textareaRef.current.value;
+      setTimeout(autoExpandEditor, 0);
+    }
+  };
+
+  const syncToTextarea = () => {
+    if (textareaRef.current && editorRef.current) {
+      textareaRef.current.value = editorRef.current.innerHTML;
     }
   };
 
@@ -313,7 +408,11 @@ function RichField({ label, value, onChange, rows = 6, onNotify }) {
         {label && <label className="form-label" style={{ marginBottom: 0 }}>{label}</label>}
         <div className="rich-field-modes">
           {["text", "html"].map(m => (
-            <button key={m} type="button" onClick={() => setMode(m)}
+            <button key={m} type="button" onClick={() => {
+              if (mode === "html" && m === "text") syncToTextarea();
+              if (mode === "text" && m === "html") syncFromTextarea();
+              setMode(m);
+            }}
               className={`rich-field-mode-btn${mode === m ? " active" : ""}`}>{m}</button>
           ))}
         </div>
@@ -324,24 +423,132 @@ function RichField({ label, value, onChange, rows = 6, onNotify }) {
         onPaste={handlePaste}
         placeholder={mode === "html" ? "<p>Enter HTML here...</p>" : "Enter plain text description..."}
         className="form-textarea"
-        style={{ fontFamily: mode === "html" ? "monospace" : "var(--font)", marginTop: 4 }}
+        style={{ fontFamily: mode === "html" ? "monospace" : "var(--font)", marginTop: 4, display: mode === "text" ? "block" : "none" }}
       />
       {mode === "html" && (
-        <div style={{ fontSize: "0.75rem", color: "#666", marginTop: 6 }}>
-          💡 Paste WordPress tables directly — they'll auto-format! kW values &amp; model codes will be auto-tagged on Save.
-        </div>
-      )}
-      {mode === "html" && value && (
-        <div className="rich-field-preview">
-          <p className="rich-field-preview-label">Preview</p>
-          <div dangerouslySetInnerHTML={{ __html: value }} />
-        </div>
+        <>
+          <div style={{ fontSize: "0.75rem", color: "#666", marginTop: 6 }}>
+            💡 Paste WordPress tables directly — they'll auto-format! kW values &amp; model codes will be auto-tagged on Save.
+          </div>
+          <div className="rich-field-preview" style={{ marginTop: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
+              <p className="rich-field-preview-label" style={{ margin: 0 }}>Editor</p>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", flex: 1 }}>
+                <button type="button" onClick={() => execCommand("bold")} title="Bold (Ctrl+B)" style={{ padding: "4px 8px", fontSize: "0.8rem", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", cursor: "pointer" }}>
+                  <i className="fa-solid fa-bold" />
+                </button>
+                <button type="button" onClick={() => execCommand("italic")} title="Italic (Ctrl+I)" style={{ padding: "4px 8px", fontSize: "0.8rem", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", cursor: "pointer" }}>
+                  <i className="fa-solid fa-italic" />
+                </button>
+                <button type="button" onClick={() => execCommand("underline")} title="Underline (Ctrl+U)" style={{ padding: "4px 8px", fontSize: "0.8rem", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", cursor: "pointer" }}>
+                  <i className="fa-solid fa-underline" />
+                </button>
+                <div style={{ width: 1, background: "var(--border)", margin: "0 4px" }} />
+                <button type="button" onClick={() => execCommand("justifyLeft")} title="Align Left" style={{ padding: "4px 8px", fontSize: "0.8rem", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", cursor: "pointer" }}>
+                  <i className="fa-solid fa-align-left" />
+                </button>
+                <button type="button" onClick={() => execCommand("justifyCenter")} title="Align Center" style={{ padding: "4px 8px", fontSize: "0.8rem", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", cursor: "pointer" }}>
+                  <i className="fa-solid fa-align-center" />
+                </button>
+                <button type="button" onClick={() => execCommand("justifyRight")} title="Align Right" style={{ padding: "4px 8px", fontSize: "0.8rem", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", cursor: "pointer" }}>
+                  <i className="fa-solid fa-align-right" />
+                </button>
+                <div style={{ width: 1, background: "var(--border)", margin: "0 4px" }} />
+                <button type="button" onClick={() => execCommand("insertUnorderedList")} title="Bullet List" style={{ padding: "4px 8px", fontSize: "0.8rem", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", cursor: "pointer" }}>
+                  <i className="fa-solid fa-list-ul" />
+                </button>
+                <button type="button" onClick={() => execCommand("insertOrderedList")} title="Numbered List" style={{ padding: "4px 8px", fontSize: "0.8rem", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", cursor: "pointer" }}>
+                  <i className="fa-solid fa-list-ol" />
+                </button>
+              </div>
+            </div>
+            <div
+              ref={editorRef}
+              contentEditable
+              onInput={handleEditorChange}
+              onBlur={handleEditorChange}
+              onPaste={handlePaste}
+              dangerouslySetInnerHTML={{ __html: value }}
+              style={{
+                padding: 12,
+                borderRadius: "var(--r)",
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                minHeight: 150,
+                height: "auto",
+                fontFamily: "var(--font)",
+                fontSize: "0.95rem",
+                lineHeight: 1.6,
+                color: "var(--text)",
+                outline: "none",
+                overflowY: "auto",
+                resize: "none",
+                wordWrap: "break-word",
+                whiteSpace: "pre-wrap",
+              }}
+            />
+          </div>
+        </>
       )}
     </div>
   );
 }
 
 // ─── Auto-tag preview banner ───────────────────────────────────────────────────
+// ─── Smart Tag Suggestions from Name & Description ──────────────────────
+function TagSuggestions({ name, description, currentTags, allTags, onAddTags }) {
+  // Find tags that appear in name or description
+  const suggestedTags = allTags.filter(tag => {
+    if (currentTags.includes(tag)) return false; // Already added
+    const nameLower = (name || "").toLowerCase();
+    const descLower = (description || "").toLowerCase();
+    // Check if tag appears as a word in name or description
+    return new RegExp(`\\b${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(nameLower) ||
+           new RegExp(`\\b${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(descLower);
+  });
+
+  if (!suggestedTags.length) return null;
+
+  return (
+    <div style={{
+      background: "var(--surface-2)",
+      border: "1px solid rgba(245,157,11,0.25)",
+      borderRadius: "var(--r)", padding: "12px 14px",
+      fontSize: "0.78rem", color: "var(--text-2)", lineHeight: 1.7, marginTop: 8, marginBottom: 12,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, fontWeight: 700, color: "var(--text)", fontSize: "0.8rem" }}>
+        <i className="fa-solid fa-lightbulb" style={{ color: "#f59d0b" }} />
+        Found matching keywords in your content
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
+        {suggestedTags.map(t => (
+          <span key={t} style={{
+            fontSize: "0.72rem", fontWeight: 600,
+            background: "rgba(245,157,11,0.1)",
+            color: "#92400e",
+            border: "1px solid rgba(245,157,11,0.3)",
+            borderRadius: 4, padding: "3px 8px",
+          }}>+ {t}</span>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => onAddTags(suggestedTags)}
+        style={{
+          background: "#f59d0b", color: "#fff", border: "none",
+          padding: "6px 12px", borderRadius: 4, fontSize: "0.75rem",
+          fontWeight: 600, cursor: "pointer", transition: "all 0.2s",
+        }}
+        onMouseEnter={e => e.currentTarget.style.background = "#d97706"}
+        onMouseLeave={e => e.currentTarget.style.background = "#f59d0b"}
+      >
+        <i className="fa-solid fa-check" style={{ marginRight: 4 }} />
+        Add these tags
+      </button>
+    </div>
+  );
+}
+
 function AutoTagPreview({ description, currentTags }) {
   const { kwTags, modelTags } = extractTagsFromDescription(description);
   const newKw    = kwTags.filter(t => !currentTags.includes(t));
@@ -428,6 +635,35 @@ function PillInput({ label, value = [], onChange, placeholder, suggestions = [] 
     if (e.key === "Backspace" && !input && value.length) remove(value.length - 1);
     if (e.key === "Escape")   setShowSug(false);
   };
+  const handlePaste = e => {
+    e.preventDefault();
+    const text = e.clipboardData?.getData("text/plain") || "";
+    if (!text.trim()) return;
+
+    // Split by newlines and filter out empty lines
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+
+    // Check if lines have bullet points (», •, -, *, etc.)
+    const bulletPattern = /^[»•\-*+]\s+/;
+    const hasBullets = lines.some(l => bulletPattern.test(l));
+
+    let newFeatures = [];
+    if (hasBullets) {
+      // Parse lines with bullets
+      newFeatures = lines
+        .map(l => l.replace(bulletPattern, "").trim())
+        .filter(l => l && !value.includes(l));
+    } else {
+      // If no bullets, treat each non-empty line as a feature
+      newFeatures = lines.filter(l => l && !value.includes(l));
+    }
+
+    if (newFeatures.length > 0) {
+      onChange([...value, ...newFeatures]);
+      setInput("");
+      setShowSug(false);
+    }
+  };
   return (
     <div className="form-group" style={{ marginBottom: 0, position: "relative" }}>
       {label && <label className="form-label">{label}</label>}
@@ -444,6 +680,7 @@ function PillInput({ label, value = [], onChange, placeholder, suggestions = [] 
           value={input} onChange={e => { setInput(e.target.value); setShowSug(true); }}
           onKeyDown={handleKey} onFocus={() => setShowSug(true)}
           onBlur={() => setTimeout(() => setShowSug(false), 150)}
+          onPaste={handlePaste}
           placeholder={value.length ? "" : (placeholder || "Type and press Enter...")}
           className="pill-input-field"
         />
@@ -460,7 +697,7 @@ function PillInput({ label, value = [], onChange, placeholder, suggestions = [] 
           )}
         </div>
       )}
-      <p className="pill-hint">Press Enter to add items, Backspace to remove the last item</p>
+      <p className="pill-hint">Press Enter to add items, Backspace to remove the last item, or paste formatted lists (» • - *)</p>
     </div>
   );
 }
@@ -533,6 +770,45 @@ function ImageStrip({ images = [], onRemove }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function AddMoreImagesButton({ label, uploading, onChange }) {
+  const [hovering, setHovering] = useState(false);
+  const ref = useRef();
+  const divRef = useRef();
+
+  const handlePaste = e => {
+    if (uploading) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files = [];
+    for (let item of items) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+    }
+    if (files.length > 0) { e.preventDefault(); onChange?.({ target: { files: files } }); }
+  };
+
+  return (
+    <div
+      ref={divRef}
+      className={`add-more-label${uploading ? " uploading" : ""}`}
+      onPaste={handlePaste}
+      onMouseEnter={() => { setHovering(true); divRef.current?.focus(); }}
+      onMouseLeave={() => setHovering(false)}
+      onClick={() => !uploading && ref.current?.click()}
+      tabIndex="0"
+      style={{ outline: "none", cursor: uploading ? "default" : "pointer", position: "relative" }}
+    >
+      <i className="fa-solid fa-plus" />
+      {uploading ? "Converting & uploading…" : label}
+      {hovering && !uploading && <p style={{ fontSize: "0.65rem", color: "var(--brand)", margin: "4px 0 0", fontWeight: 600 }}>Hover to paste image • Ctrl+V</p>}
+      <input ref={ref} type="file" accept="image/*" multiple style={{ display: "none" }} disabled={uploading}
+        onChange={onChange} />
     </div>
   );
 }
@@ -990,7 +1266,7 @@ function ProductAuditStrip({ product }) {
 }
 
 // ─── Grid Card ────────────────────────────────────────────────────────────────
-function ProductCard({ p, onEdit, onDelete }) {
+function ProductCard({ p, onEdit, onDelete, onDuplicate }) {
   const [hovered,  setHovered]  = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef();
@@ -1023,6 +1299,9 @@ function ProductCard({ p, onEdit, onDelete }) {
               <div className="product-grid-menu">
                 <button type="button" onClick={() => { setMenuOpen(false); onEdit(p); }}>
                   <i className="fa-solid fa-pen" /> Edit
+                </button>
+                <button type="button" onClick={() => { setMenuOpen(false); onDuplicate(p); }}>
+                  <i className="fa-solid fa-copy" /> Duplicate
                 </button>
                 <button type="button" className="danger" onClick={() => { setMenuOpen(false); onDelete(p); }}>
                   <i className="fa-solid fa-trash" /> Delete
@@ -1262,6 +1541,45 @@ export default function Products({ currentUser }) {
       setShowRevisions(false);
       setModalMenuOpen(false);
       setModalOpen(true);
+    } catch (err) { add(err.message, "error"); }
+  };
+
+  const openDuplicate = async row => {
+    try {
+      const data = await getProductByIdLive(row.id);
+      if (!data) throw new Error("Product not found");
+
+      // Generate new slug with "-copy" suffix
+      const newSlug = `${data.slug}-copy`;
+
+      const loaded = {
+        name:              `${data.name || ""} (Copy)`,
+        slug:              newSlug,
+        short_description: data.short_description || "",
+        description:       data.description       || "",
+        thumbnail:         data.thumbnail         || "",
+        images:            data.images            || [],
+        spec_images:       data.spec_images       || [],
+        files:             data.files             || [],
+        categories:        data.categories        || [],
+        tags:              data.tags              || [],
+        features:          data.features          || [],
+        brand:             data.brand             || "SAWO",
+        type:              data.type              || "",
+        status:            "draft",  // Set to draft for review
+        visible:           true,
+        featured:          false,
+        sort_order:        0,
+      };
+      setForm(loaded);
+      setSavedForm(EMPTY_FORM); // Not saved yet
+      setSlugEdited(false);
+      setEditing(null); // New product, not editing
+      setEditingFull(null);
+      setShowRevisions(false);
+      setModalMenuOpen(false);
+      setModalOpen(true);
+      add("Duplicated! Remember to change the slug before saving.", "info");
     } catch (err) { add(err.message, "error"); }
   };
 
@@ -1519,7 +1837,7 @@ export default function Products({ currentUser }) {
               {search ? `No products match "${search}"` : "No products yet — click New Product to create one."}
             </div>
           )}
-          {filtered.map(p => <ProductCard key={p.id} p={p} onEdit={openEdit} onDelete={setConfirmDel} />)}
+          {filtered.map(p => <ProductCard key={p.id} p={p} onEdit={openEdit} onDuplicate={openDuplicate} onDelete={setConfirmDel} />)}
         </div>
       )}
 
@@ -1601,6 +1919,7 @@ export default function Products({ currentUser }) {
                     <td style={{ textAlign: "right" }}>
                       <div className="table-actions">
                         <IconBtn icon="fa-pen"   title="Edit"   onClick={() => openEdit(p)} />
+                        <IconBtn icon="fa-copy" title="Duplicate" onClick={() => openDuplicate(p)} />
                         <IconBtn icon="fa-trash" title="Delete" onClick={() => setConfirmDel(p)} danger />
                       </div>
                     </td>
@@ -1796,12 +2115,12 @@ export default function Products({ currentUser }) {
           <PillInput label="Features" value={form.features}
             onChange={v => setForm(f => ({ ...f, features: v }))} placeholder="e.g. Auto shutoff, Stainless steel" />
 
-          {/* Short Description */}
-          <SectionLabel label="Short Description" />
-          <Field label="Short Description" value={form.short_description}
-            onChange={e => setForm(f => ({ ...f, short_description: e.target.value }))} placeholder="One-line summary" />
+          {/* Product Description */}
+          <SectionLabel label="Product Description" />
+          <RichField label="Product Description" value={form.short_description}
+            onChange={e => setForm(f => ({ ...f, short_description: e.target.value }))} rows={4} onNotify={add} />
 
-          {/* Categories & Tags ← below Short Description */}
+          {/* Categories & Tags */}
           <SectionLabel label="Categories & Tags" />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <PillInput label="Categories" value={form.categories}
@@ -1811,9 +2130,21 @@ export default function Products({ currentUser }) {
               placeholder="e.g. electric, 9kW" suggestions={allTags} />
           </div>
 
-          {/* Additional Description or Table */}
-          <SectionLabel label="Additional Description or Table" />
-          <RichField label="Additional Description or Table" value={form.description}
+          {/* Tag Suggestions from Name */}
+          <TagSuggestions
+            name={form.name}
+            description={form.short_description}
+            currentTags={form.tags}
+            allTags={allTags}
+            onAddTags={suggestedTags => {
+              setForm(f => ({ ...f, tags: [...new Set([...f.tags, ...suggestedTags])] }));
+              add(`✓ Added ${suggestedTags.length} matching tag(s) from content`, "success");
+            }}
+          />
+
+          {/* Specifications */}
+          <SectionLabel label="Specifications" />
+          <RichField label="Specifications" value={form.description}
             onChange={e => setForm(f => ({ ...f, description: e.target.value }))} onNotify={add} />
           <AutoTagPreview description={form.description} currentTags={form.tags} />
 
@@ -1822,12 +2153,8 @@ export default function Products({ currentUser }) {
           {form.images.length > 0 ? (
             <>
               <ImageStrip images={form.images} onRemove={i => setForm(f => ({ ...f, images: f.images.filter((_, idx) => idx !== i) }))} />
-              <label className={`add-more-label${upImgs ? " uploading" : ""}`}>
-                <i className="fa-solid fa-plus" />
-                {upImgs ? "Converting & uploading…" : "Add More Images"}
-                <input type="file" accept="image/*" multiple style={{ display: "none" }} disabled={upImgs}
-                  onChange={e => e.target.files?.length && uploadMoreImages(Array.from(e.target.files))} />
-              </label>
+              <AddMoreImagesButton label="Add More Images" uploading={upImgs}
+                onChange={e => e.target.files?.length && uploadMoreImages(Array.from(e.target.files))} />
             </>
           ) : (
             <ImageUploader onUpload={uploadMoreImages} label="Upload Gallery Images (multiple) · auto-converted to WebP" multiple uploading={upImgs} />
@@ -1838,12 +2165,8 @@ export default function Products({ currentUser }) {
           {form.spec_images.length > 0 ? (
             <>
               <ImageStrip images={form.spec_images} onRemove={i => setForm(f => ({ ...f, spec_images: f.spec_images.filter((_, idx) => idx !== i) }))} />
-              <label className={`add-more-label${upSpec ? " uploading" : ""}`}>
-                <i className="fa-solid fa-plus" />
-                {upSpec ? "Converting & uploading…" : "Add More Spec Images"}
-                <input type="file" accept="image/*" multiple style={{ display: "none" }} disabled={upSpec}
-                  onChange={e => e.target.files?.length && uploadSpecImages(Array.from(e.target.files))} />
-              </label>
+              <AddMoreImagesButton label="Add More Spec Images" uploading={upSpec}
+                onChange={e => e.target.files?.length && uploadSpecImages(Array.from(e.target.files))} />
             </>
           ) : (
             <ImageUploader onUpload={uploadSpecImages} label="Upload Spec Images · auto-converted to WebP" multiple uploading={upSpec} />
