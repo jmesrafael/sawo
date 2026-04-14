@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { getVisibleProducts } from "../../../local-storage/cacheReader";
+import { getVisibleProductsCached } from "../../../local-storage/supabaseReader";
 import ButtonClear from "../../../components/Buttons/ButtonClear";
 import CirclesInfo from "../../../components/CirclesInfo";
 import heroImg from "../../../assets/Sauna/Sauna Heaters/wall-hero.webp";
@@ -40,6 +40,55 @@ const DISPLAY_TAGS = [
   // "wall-mount",
   // "compact",
 ];
+
+// ─── Grouping by product type (Nordex, Mini, Scandia, etc.) ──────────────────
+const FIXED_ORDER = [
+  "Nordex Mini Combi", "Nordex Combi", "Nordex Mini", "Nordex",
+  "Mini Combi", "Mini X", "Mini",
+  "Scandia Combi", "Scandia",
+  "Krios", "Scandifire",
+];
+
+const GROUP_KEYWORDS = {
+  "Nordex Mini Combi": ["Nordex Mini Combi", "NRMC"],
+  "Nordex Combi":      ["Nordex Combi", "NRNC"],
+  "Nordex Mini":       ["Nordex Mini", "NRM-"],
+  "Nordex":            ["Nordex", "NRN-"],
+  "Mini Combi":        ["Mini Combi", "MNC"],
+  "Mini X":            ["Mini X", "MX "],
+  "Mini":              ["Mini NB", "MN "],
+  "Scandia Combi":     ["Scandia Combi", "SCAC"],
+  "Scandia":           ["Scandia", "SCA-"],
+  "Krios":             ["Krios", "KRI"],
+  "Scandifire":        ["Scandifire"],
+};
+
+/** Group products by brand/type keywords */
+function groupProducts(products) {
+  const groupedProducts = products.reduce((groups, product) => {
+    let assigned = false;
+    for (const [group, keywords] of Object.entries(GROUP_KEYWORDS)) {
+      for (const kw of keywords) {
+        const nameMatch = product.name?.toLowerCase().includes(kw.toLowerCase());
+        const tagMatch = product.tags?.some((t) => t.toLowerCase().includes(kw.toLowerCase()));
+        if (nameMatch || tagMatch) {
+          if (!groups[group]) groups[group] = [];
+          groups[group].push(product);
+          assigned = true;
+          break;
+        }
+      }
+      if (assigned) break;
+    }
+    if (!assigned) {
+      if (!groups["Other"]) groups["Other"] = [];
+      groups["Other"].push(product);
+    }
+    return groups;
+  }, {});
+  return groupedProducts;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Case-insensitive check: does `arr` contain any item from `targets`? */
@@ -124,6 +173,9 @@ export default function WallMounted() {
   // Search query for the displayed grid
   const [search, setSearch] = useState("");
 
+  // Grouping by product type
+  const [activeGroup, setActiveGroup] = useState(null);
+
   // ── Online/offline listeners ────────────────────────────────────────────
   useEffect(() => {
     const onOnline  = () => { setOffline(false); fetchProducts(true); };
@@ -139,10 +191,10 @@ export default function WallMounted() {
   // ── Initial fetch ────────────────────────────────────────────────────────
   useEffect(() => { fetchProducts(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Fetch from local cache ───────────────────────────────────────────────
-  function fetchProducts() {
+  // ── Fetch from Supabase with smart caching ──────────────────────────────
+  async function fetchProducts() {
     try {
-      let data = getVisibleProducts();
+      let data = await getVisibleProductsCached();
       // Sort by sort_order first, then by created_at descending
       data.sort((a, b) => {
         const sortA = a.sort_order ?? 999;
@@ -157,6 +209,14 @@ export default function WallMounted() {
       setLoading(false);
     }
   }
+
+  // ── Group and filter products ────────────────────────────────────────────
+  const groupedProducts = useMemo(() => groupProducts(allProducts), [allProducts]);
+  const groupNames = useMemo(() => FIXED_ORDER.filter((g) => groupedProducts[g]), [groupedProducts]);
+  const visibleGroups = useMemo(
+    () => (activeGroup ? groupNames.filter((g) => g === activeGroup) : groupNames),
+    [activeGroup, groupNames]
+  );
 
   // ── Client-side search filter ────────────────────────────────────────────
   const displayed = useMemo(() => {
@@ -268,21 +328,30 @@ export default function WallMounted() {
         </div>
       )}
 
-      {/* ── PRODUCTS GRID ────────────────────────────────────────────────── */}
-      <section className="wm-section wm-section--flush-top">
-        <div className="wm-container">
+      {/* ── FILTER + SEARCH ───────────────────────────────────────────────── */}
+      {!loading && allProducts.length > 0 && (
+        <section className="wm-section wm-section--flush-bottom">
+          <div className="wm-container">
+            <div className="wm-filter-search-row">
+              {/* ── Filter pills ── */}
+              <div className="wm-filter-pills-group">
+                <button className={`wm-filter-btn ${activeGroup === null ? "wm-filter-btn--active" : ""}`} onClick={() => setActiveGroup(null)}>All</button>
+                {groupNames.map((g) => (
+                  <button key={g} className={`wm-filter-btn ${activeGroup === g ? "wm-filter-btn--active" : ""}`} onClick={() => setActiveGroup(g)}>
+                    {g}
+                  </button>
+                ))}
+              </div>
 
-          {/* ── Search bar (only shown when there are products) ── */}
-          {!loading && allProducts.length > 0 && (
-            <>
-              <div className="wm-search-wrap">
+              {/* ── Search bar ── */}
+              <div className="wm-search-wrap wm-search-bar-fixed">
                 <i className="fa-solid fa-magnifying-glass wm-search-icon" />
                 <input
                   className="wm-search-input"
                   type="text"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="Search heaters by name, tag..."
+                  placeholder="Search heaters..."
                 />
                 {search && (
                   <button className="wm-search-clear" onClick={() => setSearch("")} title="Clear search">
@@ -290,15 +359,31 @@ export default function WallMounted() {
                   </button>
                 )}
               </div>
-              {search && (
-                <p className="wm-search-count">
-                  {displayed.length === 0
-                    ? `No results for "${search}"`
-                    : `${displayed.length} result${displayed.length !== 1 ? "s" : ""} for "${search}"`}
-                </p>
-              )}
-            </>
-          )}
+            </div>
+            {search && (
+              <p className="wm-search-count">
+                {visibleGroups.flatMap(g => (groupedProducts[g] || []).filter(p => {
+                  const q = search.trim().toLowerCase();
+                  return p.name?.toLowerCase().includes(q) || p.short_description?.toLowerCase().includes(q) || (p.categories || []).some(c => c.toLowerCase().includes(q)) || (p.tags || []).some(t => t.toLowerCase().includes(q));
+                })).length === 0
+                  ? `No results for "${search}"`
+                  : `${visibleGroups.flatMap(g => (groupedProducts[g] || []).filter(p => {
+                    const q = search.trim().toLowerCase();
+                    return p.name?.toLowerCase().includes(q) || p.short_description?.toLowerCase().includes(q) || (p.categories || []).some(c => c.toLowerCase().includes(q)) || (p.tags || []).some(t => t.toLowerCase().includes(q));
+                  })).length} result${visibleGroups.flatMap(g => (groupedProducts[g] || []).filter(p => {
+                    const q = search.trim().toLowerCase();
+                    return p.name?.toLowerCase().includes(q) || p.short_description?.toLowerCase().includes(q) || (p.categories || []).some(c => c.toLowerCase().includes(q)) || (p.tags || []).some(t => t.toLowerCase().includes(q));
+                  })).length !== 1 ? "s" : ""} for "${search}"`
+                }
+              </p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ── PRODUCTS GRID ────────────────────────────────────────────────── */}
+      <section className="wm-section wm-section--flush-top">
+        <div className="wm-container">
 
           {/* ── Loading skeletons ── */}
           {loading && (
@@ -314,21 +399,41 @@ export default function WallMounted() {
             </div>
           )}
 
-          {!loading && allProducts.length > 0 && displayed.length === 0 && search && (
-            <div style={{ textAlign: "center", padding: "48px 0", fontFamily: "'Montserrat', sans-serif", color: "#a67853" }}>
-              <i className="fa-solid fa-magnifying-glass" style={{ fontSize: "1.8rem", opacity: 0.35, display: "block", marginBottom: 10 }} />
-              <p style={{ margin: 0 }}>No heaters match "<strong>{search}</strong>"</p>
-              <button onClick={() => setSearch("")} style={{ marginTop: 10, background: "none", border: "none", cursor: "pointer", color: "#8b5e3c", fontFamily: "'Montserrat', sans-serif", fontSize: "0.8rem", textDecoration: "underline" }}>
-                Clear search
-              </button>
-            </div>
-          )}
-
-          {/* ── Product grid ── */}
-          {!loading && displayed.length > 0 && (
-            <div className="wm-products-grid">
-              {displayed.map(p => <ProductCard key={p.id || p.slug} product={p} />)}
-            </div>
+          {/* ── Grouped products ── */}
+          {!loading && allProducts.length > 0 && (
+            <>
+              {visibleGroups.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "48px 0", fontFamily: "'Montserrat', sans-serif", color: "#a67853" }}>
+                  <i className="fa-solid fa-magnifying-glass" style={{ fontSize: "1.8rem", opacity: 0.35, display: "block", marginBottom: 10 }} />
+                  <p style={{ margin: 0 }}>No heaters match "<strong>{search}</strong>"</p>
+                  <button onClick={() => setSearch("")} style={{ marginTop: 10, background: "none", border: "none", cursor: "pointer", color: "#8b5e3c", fontFamily: "'Montserrat', sans-serif", fontSize: "0.8rem", textDecoration: "underline" }}>
+                    Clear search
+                  </button>
+                </div>
+              ) : (
+                visibleGroups.map((brand) => {
+                  const q = search.trim().toLowerCase();
+                  const items = (groupedProducts[brand] || []).filter(p =>
+                    !q ||
+                    p.name?.toLowerCase().includes(q) ||
+                    p.short_description?.toLowerCase().includes(q) ||
+                    (p.categories || []).some(c => c.toLowerCase().includes(q)) ||
+                    (p.tags || []).some(t => t.toLowerCase().includes(q))
+                  );
+                  if (items.length === 0) return null;
+                  return (
+                    <div className="wm-group" key={brand}>
+                      <h3 className="wm-group-title">{brand.toUpperCase()}</h3>
+                      <div className="wm-products-grid">
+                        {items.map((product) => (
+                          <ProductCard key={product.id || product.slug} product={product} />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </>
           )}
 
         </div>
