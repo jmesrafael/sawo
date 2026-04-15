@@ -1,5 +1,6 @@
 {
   "root": "frontend",
+  "nodeVersion": "18.x",
   "buildCommand": "npm run build",
   "outputDirectory": "build",
   "headers": [
