@@ -11,22 +11,25 @@
 
 // ─── Patterns that signal a natural line-break inside a <th> ─────────────────
 // Each entry is checked against the full text content of the cell.
-// If matched, everything after `splitAfter` (a regex) goes on the next line.
+// If matched, everything after `splitText` will go on the next line.
 const HEADER_SPLIT_RULES = [
   // "Size of Heater (mm) Length Width Height"  → split after "(mm)"
-  { detect: /\(mm\)/i,   splitAfter: /(\(mm\))\s+/ },
+  { detect: /\(mm\)/i,   splitText: "(mm)" },
 
   // "Sauna Room min. (m3) max."  → split after "Room"
-  { detect: /sauna\s+room/i, splitAfter: /(room)\s+/i },
+  { detect: /sauna\s+room/i, splitText: "Room" },
 
   // "Stones (kg)"  → split after "Stones"
-  { detect: /stones?\s*\(kg\)/i, splitAfter: /(stones?)\s+/i },
+  { detect: /stones?\s*\(kg\)/i, splitText: "Stones" },
 
   // "Minimum Safety Distances A | B | C | D"  → split after "Distances"
-  { detect: /minimum\s+safety\s+distances/i, splitAfter: /(distances)\s+/i },
+  { detect: /minimum\s+safety\s+distances/i, splitText: "Distances" },
+
+  // "Heater | Tank | Control" headers separated by pipes/breaks - don't split single "kW" or "Tank"
+  { detect: /\|/, splitText: "|" },
 
   // Generic: text that contains a newline or "\n" literal
-  { detect: /\n/, splitAfter: /\n/ },
+  { detect: /\n/, splitText: "\n" },
 ];
 
 /**
@@ -39,9 +42,13 @@ function applyHeaderLineBreaks(rawInner) {
 
   for (const rule of HEADER_SPLIT_RULES) {
     if (rule.detect.test(text)) {
-      // Apply split to the text (not innerHTML, since there are no child tags in these cells)
-      const split = text.replace(rule.splitAfter, "$1<br>");
-      return split;
+      // Find the split point and insert <br> after it (case-insensitive for the split text)
+      const regex = new RegExp(`(${rule.splitText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})\\s*`, 'i');
+      const result = text.replace(regex, `$1<br>`);
+      // Only return if we actually made a replacement (text changed)
+      if (result !== text) {
+        return result;
+      }
     }
   }
 

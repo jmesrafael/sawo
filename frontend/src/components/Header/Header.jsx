@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import sLogo from "../../assets/SAWO-logo.webp";
 import menuPaths from "../../menuPaths";
+import SearchBar from "./SearchBar";
 
 export default function Header() {
   const location = useLocation();
@@ -11,6 +12,7 @@ export default function Header() {
   const [hoveredSubmenu, setHoveredSubmenu] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [forceMobile, setForceMobile] = useState(false);
+  const [searchExpanded, setSearchExpanded] = useState(false);
 
   const lastScrollY = useRef(0);
   const navRef = useRef(null);
@@ -179,9 +181,9 @@ export default function Header() {
         }`}
         style={{ fontFamily: `"Montserrat"` }}
       >
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-3">
-          {/* Logo */}
-          <Link to="/" className="flex-shrink-0">
+        <div className="w-full flex items-center justify-between py-3 px-6 md:px-8">
+          {/* Logo with left padding */}
+          <Link to="/" className="flex-shrink-0 pl-2">
             <img
               src={sLogo}
               alt="SAWO-logo"
@@ -189,12 +191,13 @@ export default function Header() {
             />
           </Link>
 
-          {/* Desktop nav */}
+          {/* Desktop nav + Search (grouped on right) */}
           {!forceMobile && (
-            <nav
-              ref={navRef}
-              className="hidden md:flex gap-6 whitespace-nowrap text-[16px] font-normal text-[rgb(51,51,51)]"
-            >
+            <div className="hidden md:flex items-center gap-6">
+              <nav
+                ref={navRef}
+                className="flex gap-6 whitespace-nowrap text-[16px] font-normal text-[rgb(51,51,51)]"
+              >
               {navItems.map((item) => (
                 <div
                   key={item.name}
@@ -317,6 +320,71 @@ export default function Header() {
                 </div>
               ))}
             </nav>
+
+            {/* Search Bar - Icon or Expanded */}
+            <div
+              className="ml-auto pr-2 md:pr-4 flex items-center transition-all duration-300"
+              id="search-container"
+              style={{
+                opacity: searchExpanded ? 1 : 1,
+                transform: searchExpanded ? 'translateX(0)' : 'translateX(0)'
+              }}
+            >
+              {searchExpanded ? (
+                // Expanded search bar with smooth animation - responsive width
+                <div
+                  className="w-40 sm:w-44 md:w-48 lg:w-56 relative"
+                  style={{
+                    animation: 'slideInRight 0.3s ease-out'
+                  }}
+                >
+                  <SearchBar
+                    isInline={true}
+                    onBlur={() => {
+                      // Delay closing to allow click to register
+                      setTimeout(() => setSearchExpanded(false), 100);
+                    }}
+                  />
+                </div>
+              ) : (
+                // Search icon only
+                <button
+                  onClick={() => setSearchExpanded(true)}
+                  className="p-2 hover:text-[#af8564] transition-colors text-[rgb(51,51,51)]"
+                  aria-label="Search"
+                  style={{
+                    animation: searchExpanded ? 'none' : 'slideInLeft 0.3s ease-out'
+                  }}
+                >
+                  <i className="fa-solid fa-search text-lg"></i>
+                </button>
+              )}
+            </div>
+
+            {/* CSS Animations */}
+            <style>{`
+              @keyframes slideInRight {
+                from {
+                  opacity: 0;
+                  transform: translateX(20px);
+                }
+                to {
+                  opacity: 1;
+                  transform: translateX(0);
+                }
+              }
+              @keyframes slideInLeft {
+                from {
+                  opacity: 0;
+                  transform: translateX(-20px);
+                }
+                to {
+                  opacity: 1;
+                  transform: translateX(0);
+                }
+              }
+            `}</style>
+          </div>
           )}
 
           {/* Mobile toggle */}

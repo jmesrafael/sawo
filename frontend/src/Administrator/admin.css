@@ -534,7 +534,15 @@ body {
   overflow-y: auto;
   animation: fadeIn 0.18s ease;
 }
-.modal-wide { max-width: 720px; }
+.modal-wide {
+  max-width: 1000px;
+}
+@media (max-width: 1024px) {
+  .modal-wide { max-width: 90vw; }
+}
+@media (max-width: 768px) {
+  .modal-wide { max-width: 95vw; }
+}
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -545,6 +553,8 @@ body {
   top: 0;
   background: var(--surface);
   z-index: 1;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 .modal-title { font-size:0.95rem; font-weight:700; color:var(--text); margin:0; }
 .modal-body { padding:18px 20px 22px; }
@@ -567,6 +577,19 @@ body {
   padding-top: 14px;
   border-top: 1px solid var(--border);
   margin-top: 4px;
+}
+
+/* ── Responsive Grid Utility ─────────────────────────────────────────── */
+.responsive-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 768px) {
+  .responsive-grid-2 {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Alert / Toast ───────────────────────────────────────────────────── */
@@ -1008,11 +1031,17 @@ body {
 .img-upload-zone {
   border: 2px dashed var(--border);
   border-radius: var(--r);
-  padding: 14px 12px;
+  padding: 24px 20px;
   text-align: center;
   cursor: pointer;
   background: var(--surface-2);
   transition: all var(--t);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-height: 140px;
+  justify-content: center;
 }
 .img-upload-zone:hover,
 .img-upload-zone.dragging { border-color:var(--brand); background:var(--brand-muted); }
@@ -1029,6 +1058,8 @@ body {
   cursor: pointer;
   background: var(--surface-2);
   transition: all var(--t);
+  min-height: 140px;
+  justify-content: center;
 }
 .thumb-upload-zone:hover,
 .thumb-upload-zone.dragging { border-color:var(--brand); background:var(--brand-muted); }
@@ -1141,6 +1172,94 @@ body {
 }
 .image-strip-remove:hover { background:var(--danger); }
 
+/* ── Smart Image Gallery ─────────────────────────────────────────────── */
+.smart-image-single {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.smart-image-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 300px;
+  aspect-ratio: 4/3;
+  border-radius: var(--r);
+  overflow: hidden;
+  border: 2px solid var(--border);
+  background: var(--surface-2);
+}
+.smart-image-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.smart-image-wrapper .smart-image-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0,0,0,0.6);
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  color: #fff;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--t);
+}
+.smart-image-wrapper .smart-image-remove:hover { background: var(--danger); }
+
+.smart-image-grid {
+  display: grid;
+  gap: 12px;
+}
+.smart-image-grid.grid-2 {
+  grid-template-columns: 1fr 1fr;
+}
+.smart-image-grid.grid-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+@media (max-width: 768px) {
+  .smart-image-grid.grid-2,
+  .smart-image-grid.grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
+.smart-image-item {
+  position: relative;
+  aspect-ratio: 4/3;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  border: 2px solid var(--border);
+  background: var(--surface-2);
+}
+.smart-image-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.smart-image-item .smart-image-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(0,0,0,0.6);
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  color: #fff;
+  font-size: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--t);
+}
+.smart-image-item .smart-image-remove:hover { background: var(--danger); }
+
 .add-more-label {
   display: inline-flex;
   align-items: center;
@@ -1210,6 +1329,82 @@ body {
   color: var(--text);
   background: var(--surface);
   outline: none;
+}
+
+/* ── Smart File Display ──────────────────────────────────────────────── */
+.smart-file-single {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.smart-file-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  width: 100%;
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+  border-radius: var(--r);
+  transition: all var(--t);
+}
+.smart-file-card:hover {
+  border-color: var(--brand);
+  background: var(--brand-muted);
+}
+.smart-file-icon {
+  width: 56px;
+  height: 56px;
+  min-width: 56px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #8b5e3c, #a67853);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.4rem;
+}
+.smart-file-content {
+  flex: 1;
+  min-width: 0;
+}
+.smart-file-name {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 0.9rem;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+.smart-file-link {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--brand);
+  text-decoration: none;
+  word-break: break-all;
+}
+.smart-file-link:hover {
+  text-decoration: underline;
+}
+.smart-file-btn {
+  background: none;
+  border: none;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 8px;
+  border-radius: var(--r-sm);
+  transition: all var(--t);
+}
+.smart-file-btn:hover {
+  background: rgba(175,133,100,0.15);
+  color: var(--text);
+}
+.smart-file-edit {
+  color: var(--brand);
+}
+.smart-file-trash {
+  color: var(--danger);
 }
 
 /* ── PDF upload zone ─────────────────────────────────────────────────── */

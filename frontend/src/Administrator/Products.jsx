@@ -338,7 +338,8 @@ function RichField({ label, value, onChange, rows = 6, onNotify }) {
   };
 
   const handlePaste = (e) => {
-    if (e.target !== editorRef.current) return; // Only handle paste on contenteditable editor
+    // Check if paste happened inside the editor (not just exact target match)
+    if (!editorRef.current?.contains(e.target)) return;
 
     const html = e.clipboardData.getData("text/html");
     const text = e.clipboardData.getData("text/plain");
@@ -349,7 +350,7 @@ function RichField({ label, value, onChange, rows = 6, onNotify }) {
     let contentToInsert = html || text;
 
     // Clean and process the pasted content
-    if (contentToInsert.includes("<table")) {
+    if (/<table/i.test(contentToInsert)) {
       contentToInsert = processPastedTableHTML(contentToInsert);
       if (onNotify) onNotify("✓ Table cleaned and formatted! kW tags will be auto-extracted on Save.", "success");
     } else if (contentToInsert.includes("<")) {
@@ -666,7 +667,30 @@ function PillInput({ label, value = [], onChange, placeholder, suggestions = [] 
   };
   return (
     <div className="form-group" style={{ marginBottom: 0, position: "relative" }}>
-      {label && <label className="form-label">{label}</label>}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        {label && <label className="form-label" style={{ margin: 0 }}>{label}</label>}
+        {value.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            style={{
+              fontSize: "0.75rem",
+              padding: "4px 8px",
+              background: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--r-sm)",
+              color: "var(--text-3)",
+              cursor: "pointer",
+              transition: "all 0.15s ease"
+            }}
+            onMouseEnter={e => { e.target.style.color = "var(--text)"; e.target.style.borderColor = "var(--text-3)"; }}
+            onMouseLeave={e => { e.target.style.color = "var(--text-3)"; e.target.style.borderColor = "var(--border)"; }}
+            title="Clear all items"
+          >
+            <i className="fa-solid fa-trash-can" style={{ marginRight: 4 }} />Clear
+          </button>
+        )}
+      </div>
       <div className="pill-input-wrap" onClick={e => { e.currentTarget.querySelector("input")?.focus(); setShowSug(true); }}>
         {value.map((v, i) => (
           <span key={i} className="pill-item">
@@ -756,8 +780,45 @@ function ModelSelect({ label, value, onChange, placeholder, suggestions = [] }) 
   );
 }
 
-function ImageStrip({ images = [], onRemove }) {
+// ─── Smart Image Gallery — adapts display based on count ────────────────────────
+function SmartImageGallery({ images = [], onRemove, isSingle = false }) {
   if (!images.length) return null;
+
+  // Single image: display large
+  if (isSingle && images.length === 1) {
+    return (
+      <div className="smart-image-single">
+        <div className="smart-image-wrapper">
+          <img src={images[0]} alt="" />
+          {onRemove && (
+            <button type="button" className="smart-image-remove" onClick={() => onRemove(0)}>
+              <i className="fa-solid fa-xmark" />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // 2-3 images: grid display
+  if (isSingle && images.length <= 3) {
+    return (
+      <div className={`smart-image-grid grid-${images.length}`}>
+        {images.map((url, i) => (
+          <div key={i} className="smart-image-item">
+            <img src={url} alt="" />
+            {onRemove && (
+              <button type="button" className="smart-image-remove" onClick={() => onRemove(i)}>
+                <i className="fa-solid fa-xmark" />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Many images: compact strip
   return (
     <div className="image-strip">
       {images.map((url, i) => (
@@ -773,6 +834,7 @@ function ImageStrip({ images = [], onRemove }) {
     </div>
   );
 }
+
 
 function AddMoreImagesButton({ label, uploading, onChange }) {
   const [hovering, setHovering] = useState(false);
@@ -802,6 +864,8 @@ function AddMoreImagesButton({ label, uploading, onChange }) {
       onMouseLeave={() => setHovering(false)}
       onClick={() => !uploading && ref.current?.click()}
       tabIndex="0"
+      contentEditable={hovering && !uploading}
+      suppressContentEditableWarning
       style={{ outline: "none", cursor: uploading ? "default" : "pointer", position: "relative" }}
     >
       <i className="fa-solid fa-plus" />
@@ -809,6 +873,48 @@ function AddMoreImagesButton({ label, uploading, onChange }) {
       {hovering && !uploading && <p style={{ fontSize: "0.65rem", color: "var(--brand)", margin: "4px 0 0", fontWeight: 600 }}>Hover to paste image • Ctrl+V</p>}
       <input ref={ref} type="file" accept="image/*" multiple style={{ display: "none" }} disabled={uploading}
         onChange={onChange} />
+    </div>
+  );
+}
+
+function AddMorePdfsButton({ label, uploading, onUploadFile, onAddUrl }) {
+  const [hovering, setHovering] = useState(false);
+  const ref = useRef();
+  const divRef = useRef();
+
+  const handlePaste = e => {
+    if (uploading) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let item of items) {
+      if (item.kind === "file" && (item.type === "application/pdf" || item.type === "")) {
+        const file = item.getAsFile();
+        if (file) { e.preventDefault(); onUploadFile?.(file); return; }
+      }
+    }
+    const text = e.clipboardData.getData("text/plain")?.trim();
+    if (text && (text.startsWith("http://") || text.startsWith("https://"))) {
+      e.preventDefault();
+      onAddUrl?.(text);
+    }
+  };
+
+  return (
+    <div
+      ref={divRef}
+      className={`add-more-label${uploading ? " uploading" : ""}`}
+      onPaste={handlePaste}
+      onMouseEnter={() => { setHovering(true); divRef.current?.focus(); }}
+      onMouseLeave={() => setHovering(false)}
+      onClick={() => !uploading && ref.current?.click()}
+      tabIndex="0"
+      style={{ outline: "none", cursor: uploading ? "default" : "pointer", position: "relative" }}
+    >
+      <i className="fa-solid fa-plus" />
+      {uploading ? "Converting & uploading…" : label}
+      {hovering && !uploading && <p style={{ fontSize: "0.65rem", color: "var(--brand)", margin: "4px 0 0", fontWeight: 600 }}>Hover to paste PDF • Ctrl+V</p>}
+      <input ref={ref} type="file" accept=".pdf,application/pdf" style={{ display: "none" }} disabled={uploading}
+        onChange={e => { if (e.target.files?.[0]) onUploadFile?.(e.target.files[0]); }} />
     </div>
   );
 }
@@ -848,11 +954,19 @@ function ImageUploader({ onUpload, label = "Upload Image", multiple = false, upl
       <input ref={ref} type="file" accept="image/*" multiple={multiple} style={{ display: "none" }}
         onChange={e => handleFiles(multiple ? e.target.files : e.target.files[0])} />
       {uploading
-        ? <><i className="fa-solid fa-spinner" style={{ color: "var(--brand)", fontSize: "1.1rem", animation: "spin 1s linear infinite" }} /><p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "5px 0 0" }}>Converting &amp; uploading…</p></>
+        ? <>
+            <i className="fa-solid fa-spinner" style={{ color: "var(--brand)", fontSize: "1.8rem", animation: "spin 1s linear infinite" }} />
+            <span style={{ fontSize: "0.82rem", color: "var(--text-3)" }}>Converting &amp; uploading…</span>
+          </>
         : <>
-            <i className="fa-solid fa-cloud-arrow-up" style={{ color: "var(--brand)", fontSize: "1.2rem" }} />
-            <p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "5px 0 0" }}>{label}</p>
-            {hovering && <p style={{ fontSize: "0.65rem", color: "var(--brand)", margin: "4px 0 0", fontWeight: 600 }}>Hover to paste image • Ctrl+V</p>}
+            <div className="thumb-upload-icon">
+              <i className={`fa-solid ${multiple ? "fa-images" : "fa-image"}`} />
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <p style={{ fontWeight: 700, fontSize: "0.85rem", color: "var(--text)", margin: "0 0 4px" }}>{label}</p>
+              <p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "0 0 6px" }}>Click to browse or drag &amp; drop · auto-converted to WebP</p>
+              {hovering && <p style={{ fontSize: "0.65rem", color: "var(--brand)", margin: "4px 0 0", fontWeight: 600 }}>Hover to paste image • Ctrl+V</p>}
+            </div>
           </>
       }
     </div>
@@ -863,45 +977,71 @@ function ImageUploader({ onUpload, label = "Upload Image", multiple = false, upl
 function ThumbnailPreview({ url, onRemove, onReplace, uploading }) {
   const [hovered, setHovered] = useState(false);
   const replaceRef = useRef();
+  const containerRef = useRef();
+
+  const handleFiles = files => {
+    const file = files instanceof FileList ? files[0] : (Array.isArray(files) ? files[0] : files);
+    if (file) onReplace(file);
+  };
+
+  const handlePaste = e => {
+    if (uploading) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let item of items) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) { e.preventDefault(); handleFiles(file); return; }
+      }
+    }
+  };
+
   return (
     <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
       <div
-        style={{ position: "relative", display: "inline-block" }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        ref={containerRef}
+        style={{ position: "relative", display: "inline-block", outline: "none", cursor: !uploading ? "pointer" : "default" }}
+        onMouseEnter={() => { setHovered(true); containerRef.current?.focus(); }}
+        onMouseLeave={() => { setHovered(false); }}
+        onPaste={handlePaste}
+        onClick={() => !uploading && replaceRef.current?.click()}
+        tabIndex="0"
       >
         <img src={url} alt="Featured" style={{
           display: "block", maxHeight: 220, maxWidth: "100%",
           borderRadius: "var(--r)", objectFit: "contain",
-          transition: "opacity 0.18s", opacity: uploading ? 0.5 : 1,
+          transition: "opacity 0.18s", opacity: uploading ? 0.5 : (hovered ? 0.8 : 1),
         }} />
         {hovered && !uploading && (
         <>
           {/* ✕ remove — top right */}
-          <button type="button" onClick={onRemove} title="Remove image" style={{
+          <button type="button" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove image" style={{
             position: "absolute", top: 8, right: 8,
             width: 28, height: 28, borderRadius: "50%",
             background: "rgba(0,0,0,0.65)", color: "#fff",
             border: "none", cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: "0.8rem", zIndex: 10, backdropFilter: "blur(2px)",
-          }}>
+            transition: "background 0.15s",
+          }} onMouseEnter={e => e.target.style.background = "rgba(192,57,43,0.8)"} onMouseLeave={e => e.target.style.background = "rgba(0,0,0,0.65)"}>
             <i className="fa-solid fa-xmark" />
           </button>
           {/* Replace — centered over image */}
-          <label title="Replace image" style={{
+          <div title="Click to browse or Ctrl+V to paste" style={{
             position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-            background: "rgba(0,0,0,0.65)", color: "#fff",
-            padding: "5px 14px", borderRadius: 20, fontSize: "0.78rem",
+            background: "rgba(0,0,0,0.7)", color: "#fff",
+            padding: "8px 16px", borderRadius: 20, fontSize: "0.78rem",
             fontWeight: 600, cursor: "pointer",
-            display: "flex", alignItems: "center", gap: 6,
-            backdropFilter: "blur(2px)", whiteSpace: "nowrap", zIndex: 10, userSelect: "none",
+            display: "flex", alignItems: "center", gap: 6, flexDirection: "column",
+            backdropFilter: "blur(3px)", whiteSpace: "nowrap", zIndex: 10, userSelect: "none",
+            pointerEvents: "none"
           }}>
-            <i className="fa-solid fa-arrow-up-from-bracket" style={{ fontSize: "0.72rem" }} />
-            Replace
-            <input ref={replaceRef} type="file" accept="image/*" style={{ display: "none" }}
-              onChange={e => { if (e.target.files[0]) { onReplace(e.target.files[0]); e.target.value = ""; } }} />
-          </label>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <i className="fa-solid fa-arrow-up-from-bracket" style={{ fontSize: "0.72rem" }} />
+              Replace
+            </div>
+            <div style={{ fontSize: "0.65rem", opacity: 0.8, fontWeight: 400, marginTop: 2 }}>Click or Ctrl+V</div>
+          </div>
         </>
         )}
         {uploading && (
@@ -914,6 +1054,8 @@ function ThumbnailPreview({ url, onRemove, onReplace, uploading }) {
             <span style={{ fontSize: "0.75rem", color: "var(--text-2)" }}>Converting &amp; uploading…</span>
           </div>
         )}
+        <input ref={replaceRef} type="file" accept="image/*" style={{ display: "none" }}
+          onChange={e => { if (e.target.files[0]) { handleFiles(e.target.files[0]); e.target.value = ""; } }} />
       </div>
     </div>
   );
@@ -968,6 +1110,56 @@ function ThumbnailUploader({ onUpload, uploading }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ─── Smart File Display — adapts layout based on count ────────────────────────
+function SmartFileDisplay({ files = [], onRemove, onRename, isSingle = false }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(files.length > 0 ? files[0].name : "");
+
+  if (!files.length) return null;
+
+  // Single file: display large card
+  if (isSingle && files.length === 1) {
+    const file = files[0];
+
+    return (
+      <div className="smart-file-single">
+        <div className="smart-file-card">
+          <div className="smart-file-icon">
+            <i className="fa-solid fa-file-pdf" />
+          </div>
+          <div className="smart-file-content">
+            {editing ? (
+              <input value={name} onChange={e => setName(e.target.value)} autoFocus className="file-row-input"
+                onBlur={() => { onRename(0, name); setEditing(false); }}
+                onKeyDown={e => { if (e.key === "Enter") { onRename(0, name); setEditing(false); } }} />
+            ) : (
+              <>
+                <div className="smart-file-name">{file.name}</div>
+                <a href={file.url} target="_blank" rel="noopener noreferrer" className="smart-file-link">
+                  {file.url ? file.url.split("/").pop() : ""}
+                </a>
+              </>
+            )}
+          </div>
+          <button type="button" onClick={() => setEditing(true)} title="Rename" className="smart-file-btn smart-file-edit">
+            <i className="fa-solid fa-pen" />
+          </button>
+          <button type="button" onClick={() => onRemove(0)} title="Remove" className="smart-file-btn smart-file-trash">
+            <i className="fa-solid fa-trash" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Multiple files: compact list
+  return (
+    <div className="file-rows">
+      {files.map((file, index) => <FileRow key={index} file={file} index={index} onRemove={onRemove} onRename={onRename} />)}
     </div>
   );
 }
@@ -1037,8 +1229,10 @@ function PdfUploader({ onUploadFile, onAddUrl, uploading = false }) {
       onDrop={e => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); }}
       onPaste={handlePaste}
       onMouseEnter={() => { setHovering(true); divRef.current?.focus(); }}
-      onMouseLeave={() => setHovering(false)}
+      onMouseLeave={() => { setHovering(false); divRef.current?.blur(); }}
       onClick={() => !uploading && fileInputRef.current?.click()}
+      contentEditable={hovering && !uploading}
+      suppressContentEditableWarning
       tabIndex="0" style={{ outline: "none" }}
     >
       <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" multiple
@@ -1124,6 +1318,21 @@ function StorageCleanupModal({ open, onClose, addToast }) {
           <br />
           <span style={{ color: "#e6a817", fontWeight: 600 }}>⚠ Always run a Dry Run first</span> to preview before committing.
         </div>
+
+        <div style={{ background: "var(--info-bg, rgba(26,111,168,0.08))", border: "1px solid var(--info, #1a6fa8)", borderRadius: "var(--r)", padding: "12px 14px", fontSize: "0.82rem", color: "var(--text-2)", lineHeight: 1.7 }}>
+          <strong style={{ color: "var(--info, #1a6fa8)" }}>🔍 How do orphaned files appear?</strong>
+          <div style={{ marginTop: 6, fontSize: "0.78rem" }}>
+            • Uploading images/PDFs but removing them from products without deleting from storage
+            <br />
+            • Replacing product images with new versions (old files left behind)
+            <br />
+            • Duplicate uploads of the same file
+            <br />
+            • Failed operations that left incomplete files
+            <br />
+            • Manual file uploads not linked to any product
+          </div>
+        </div>
         <Toggle label="Dry Run (preview only — nothing will be deleted)" checked={dryRun} onChange={v => { setDryRun(v); setResult(null); }} />
         <Btn loading={loading}
           label={loading ? "Scanning…" : dryRun ? "Preview Orphaned Files" : "Delete Orphaned Files"}
@@ -1158,15 +1367,58 @@ function StorageCleanupModal({ open, onClose, addToast }) {
                   </div>
                   {orphanList.length > 0 && (
                     <div>
-                      <div style={{ fontSize: "0.72rem", color: "var(--text-3)", marginBottom: 4, fontWeight: 600 }}>
-                        {result.dryRun ? "Would be deleted:" : "Deleted files:"}
+                      <div style={{ fontSize: "0.72rem", color: "var(--text-3)", marginBottom: 8, fontWeight: 600 }}>
+                        {result.dryRun ? "Would be deleted:" : "Deleted files:"} ({orphanList.length})
                       </div>
-                      <div style={{ maxHeight: 130, overflowY: "auto", background: "var(--surface)", borderRadius: "var(--r-sm)", padding: "6px 10px", fontFamily: "monospace", fontSize: "0.7rem", color: "var(--text-2)", lineHeight: 1.8 }}>
+                      {/* Image preview for product-images bucket */}
+                      {bucket === "product-images" && orphanList.length > 0 && (
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))", gap: 8, marginBottom: 10 }}>
+                            {orphanList.map((f, i) => {
+                              const { data } = supabase.storage.from(bucket).getPublicUrl(f);
+                              const imageUrl = data?.publicUrl || f;
+                              return (
+                                <div key={i} style={{
+                                  position: "relative",
+                                  aspectRatio: "1",
+                                  borderRadius: "var(--r-sm)",
+                                  overflow: "hidden",
+                                  border: "1px solid var(--border)",
+                                  background: "var(--surface)",
+                                }}>
+                                  <img src={imageUrl} alt={f} style={{
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "cover",
+                                  }} onError={(e) => {
+                                    e.target.style.display = "none";
+                                  }} />
+                                  <div style={{
+                                    position: "absolute",
+                                    inset: 0,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    background: "var(--surface-2)",
+                                    fontSize: "0.5rem",
+                                    color: "var(--text-3)",
+                                    textAlign: "center",
+                                    padding: "4px",
+                                  }} title={f}>
+                                    <span style={{ wordBreak: "break-word" }}>{f.split("/").pop()}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ maxHeight: bucket === "product-images" ? 80 : 130, overflowY: "auto", background: "var(--surface)", borderRadius: "var(--r-sm)", padding: "6px 10px", fontFamily: "monospace", fontSize: "0.7rem", color: "var(--text-2)", lineHeight: 1.8 }}>
                         {orphanList.map((f, i) => (
                           <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <i className={`fa-solid ${result.dryRun ? "fa-file" : "fa-circle-check"}`}
+                            <i className={`fa-solid ${result.dryRun ? (bucket === "product-images" ? "fa-image" : "fa-file-pdf") : "fa-circle-check"}`}
                               style={{ color: result.dryRun ? "var(--text-3)" : "#22c55e", fontSize: "0.65rem", flexShrink: 0 }} />
-                            {f}
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f}</span>
                           </div>
                         ))}
                       </div>
@@ -1438,6 +1690,13 @@ export default function Products({ currentUser }) {
     setUpThumb(true);
     try {
       const url = await uploadFileToSupabase(file, "product-images");
+      // Delete old thumbnail if exists
+      if (form.thumbnail && form.thumbnail !== url) {
+        await deleteStorageUrls([form.thumbnail]).catch(err => {
+          console.warn("[Products] Failed to delete old thumbnail:", err);
+          // Don't fail the whole operation if deletion fails
+        });
+      }
       setForm(f => ({ ...f, thumbnail: url }));
       add("Thumbnail converted to WebP and uploaded.", "success");
     } catch (err) { add(err.message, "error"); }
@@ -1490,7 +1749,31 @@ export default function Products({ currentUser }) {
   };
 
   const renameFile = (i, name) => setForm(f => ({ ...f, files: f.files.map((fi, idx) => idx === i ? { ...fi, name } : fi) }));
-  const removeFile = i => setForm(f => ({ ...f, files: f.files.filter((_, idx) => idx !== i) }));
+
+  // Remove file and delete from storage
+  const removeFile = (i) => {
+    const file = form.files[i];
+    if (file?.url) {
+      deleteStorageUrls([file.url]).catch(err => {
+        console.warn("[Products] Failed to delete PDF from storage:", err);
+        add("⚠️ Failed to delete PDF from storage. It may need manual cleanup.", "warning");
+      });
+    }
+    setForm(f => ({ ...f, files: f.files.filter((_, idx) => idx !== i) }));
+  };
+
+  // Remove image and delete from storage
+  const removeImageFile = (type, index) => {
+    const array = form[type];
+    const url = array[index];
+    if (url) {
+      deleteStorageUrls([url]).catch(err => {
+        console.warn(`[Products] Failed to delete ${type} from storage:`, err);
+        add(`⚠️ Failed to delete image from storage. It may need manual cleanup.`, "warning");
+      });
+    }
+    setForm(f => ({ ...f, [type]: f[type].filter((_, idx) => idx !== index) }));
+  };
 
   // ── Modal guard ────────────────────────────────────────────────────────────
   const actualClose = () => {
@@ -1499,7 +1782,6 @@ export default function Products({ currentUser }) {
     setUnsavedOpen(false); pendingClose.current = null;
   };
   const handleModalClose = () => { if (isDirty) { pendingClose.current = actualClose; setUnsavedOpen(true); } else actualClose(); };
-  const closeModal = useCallback(() => { if (isDirty) { pendingClose.current = actualClose; setUnsavedOpen(true); } else actualClose(); }, [isDirty]); // eslint-disable-line
   const handleUnsavedStay    = () => { setUnsavedOpen(false); pendingClose.current = null; };
   const handleUnsavedDiscard = () => { actualClose(); };
 
@@ -1642,8 +1924,14 @@ export default function Products({ currentUser }) {
 
         const orphans = findOrphanedUrls(savedForm, form);
         if (orphans.length) {
-          await deleteStorageUrls(orphans);
-          console.info(`[Products] Removed ${orphans.length} orphaned file(s).`);
+          try {
+            await deleteStorageUrls(orphans);
+            console.info(`[Products] Removed ${orphans.length} orphaned file(s).`);
+            add(`Cleaned up ${orphans.length} removed file(s) from storage.`, "success");
+          } catch (deleteErr) {
+            console.error("[Products] Failed to delete orphaned files:", deleteErr);
+            add(`⚠️ Failed to delete ${orphans.length} file(s) from storage. They may need manual cleanup.`, "warning");
+          }
         }
       } else {
         const { data: inserted, error } = await supabase
@@ -1937,71 +2225,100 @@ export default function Products({ currentUser }) {
         onClose={handleModalClose}
         title={editing ? `Edit: ${editing.name}` : "New Product"}
         wide
-        actions={editing && (
-          <div style={{ position: "relative" }}>
+        actions={(
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
-              type="button"
-              onClick={e => { e.stopPropagation(); setModalMenuOpen(m => !m); }}
+              type="submit"
+              form="product-form"
+              disabled={saving}
               style={{
-                background: "none", border: "none", cursor: "pointer",
-                padding: "4px 8px", fontSize: "1rem", color: "var(--text-2)",
-                borderRadius: "var(--r-sm)", transition: "background 0.15s",
+                padding: "6px 12px",
+                fontSize: "0.8rem",
+                fontWeight: 500,
+                background: "var(--brand)",
+                color: "white",
+                border: "none",
+                borderRadius: "var(--r-sm)",
+                cursor: saving ? "not-allowed" : "pointer",
+                opacity: saving ? 0.6 : 1,
+                transition: "opacity 0.15s",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
               }}
-              onMouseEnter={e => e.currentTarget.style.background = "var(--surface-2)"}
-              onMouseLeave={e => e.currentTarget.style.background = "none"}
+              onMouseEnter={e => !saving && (e.currentTarget.style.opacity = "0.9")}
+              onMouseLeave={e => !saving && (e.currentTarget.style.opacity = "1")}
             >
-              <i className="fa-solid fa-ellipsis-vertical" />
+              <i className={`fa-solid ${saving ? "fa-spinner fa-spin" : "fa-check"}`} />
+              {editing ? "Save Changes" : "Create Product"}
             </button>
-
-            {modalMenuOpen && (
-              <div style={{
-                position: "absolute", top: "calc(100% + 4px)", right: 0,
-                background: "var(--surface)", border: "1px solid var(--border)",
-                borderRadius: "var(--r-sm)", padding: "4px 0",
-                minWidth: 150, boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-                zIndex: 1100,
-              }}>
+            {editing && (
+              <div style={{ position: "relative" }}>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowRevisions(true);
-                    setModalMenuOpen(false);
-                    fetchRevisions(editing.id);
-                  }}
+                  onClick={e => { e.stopPropagation(); setModalMenuOpen(m => !m); }}
                   style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    width: "100%", padding: "9px 14px",
-                    background: "none", border: "none",
-                    textAlign: "left", cursor: "pointer",
-                    fontSize: "0.8rem", color: "var(--text)",
+                    background: "none", border: "none", cursor: "pointer",
+                    padding: "4px 8px", fontSize: "1rem", color: "var(--text-2)",
+                    borderRadius: "var(--r-sm)", transition: "background 0.15s",
                   }}
                   onMouseEnter={e => e.currentTarget.style.background = "var(--surface-2)"}
                   onMouseLeave={e => e.currentTarget.style.background = "none"}
                 >
-                  <i className="fa-solid fa-clock-rotate-left" style={{ color: "var(--brand)", fontSize: "0.75rem" }} />
-                  Revisions
+                  <i className="fa-solid fa-ellipsis-vertical" />
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModalMenuOpen(false);
-                    setConfirmDel(editing);
-                    handleModalClose();
-                  }}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    width: "100%", padding: "9px 14px",
-                    background: "none", border: "none",
-                    textAlign: "left", cursor: "pointer",
-                    fontSize: "0.8rem", color: "var(--danger)",
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = "var(--surface-2)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "none"}
-                >
-                  <i className="fa-solid fa-trash" style={{ fontSize: "0.75rem" }} />
-                  Delete
-                </button>
+                {modalMenuOpen && (
+                  <div style={{
+                    position: "absolute", top: "calc(100% + 4px)", right: 0,
+                    background: "var(--surface)", border: "1px solid var(--border)",
+                    borderRadius: "var(--r-sm)", padding: "4px 0",
+                    minWidth: 150, boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+                    zIndex: 1100,
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowRevisions(true);
+                        setModalMenuOpen(false);
+                        fetchRevisions(editing.id);
+                      }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        width: "100%", padding: "9px 14px",
+                        background: "none", border: "none",
+                        textAlign: "left", cursor: "pointer",
+                        fontSize: "0.8rem", color: "var(--text)",
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = "var(--surface-2)"}
+                      onMouseLeave={e => e.currentTarget.style.background = "none"}
+                    >
+                      <i className="fa-solid fa-clock-rotate-left" style={{ color: "var(--brand)", fontSize: "0.75rem" }} />
+                      Revisions
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalMenuOpen(false);
+                        setConfirmDel(editing);
+                        handleModalClose();
+                      }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        width: "100%", padding: "9px 14px",
+                        background: "none", border: "none",
+                        textAlign: "left", cursor: "pointer",
+                        fontSize: "0.8rem", color: "var(--danger)",
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = "var(--surface-2)"}
+                      onMouseLeave={e => e.currentTarget.style.background = "none"}
+                    >
+                      <i className="fa-solid fa-trash" style={{ fontSize: "0.75rem" }} />
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -2082,20 +2399,47 @@ export default function Products({ currentUser }) {
               </div>
             )}
 
-            <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <form id="product-form" onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
-          {/* Featured Image */}
-          <SectionLabel label="Featured Image" />
-          {form.thumbnail ? (
-            <ThumbnailPreview
-              url={form.thumbnail}
-              onRemove={() => setForm(f => ({ ...f, thumbnail: "" }))}
-              onReplace={handleThumbUpload}
-              uploading={upThumb}
-            />
-          ) : (
-            <ThumbnailUploader onUpload={handleThumbUpload} uploading={upThumb} />
-          )}
+          {/* Featured Image & Gallery */}
+          <div className="responsive-grid-2">
+            {/* Featured Image — Left */}
+            <div>
+              <SectionLabel label="Featured Image" />
+              {form.thumbnail ? (
+                <ThumbnailPreview
+                  url={form.thumbnail}
+                  onRemove={() => {
+                    if (form.thumbnail) {
+                      deleteStorageUrls([form.thumbnail]).catch(err => {
+                        console.warn("[Products] Failed to delete thumbnail from storage:", err);
+                        add("⚠️ Failed to delete thumbnail from storage. It may need manual cleanup.", "warning");
+                      });
+                    }
+                    setForm(f => ({ ...f, thumbnail: "" }));
+                  }}
+                  onReplace={handleThumbUpload}
+                  uploading={upThumb}
+                />
+              ) : (
+                <ThumbnailUploader onUpload={handleThumbUpload} uploading={upThumb} />
+              )}
+            </div>
+
+            {/* Gallery Images — Right */}
+            <div>
+              <SectionLabel label="Gallery Images" />
+              {form.images.length > 0 ? (
+                <>
+                  <SmartImageGallery images={form.images} isSingle onRemove={i => removeImageFile("images", i)} />
+                  <AddMoreImagesButton label="Add More Images" uploading={upImgs}
+                    onChange={e => e.target.files?.length && uploadMoreImages(Array.from(e.target.files))} />
+                </>
+              ) : (
+                <ImageUploader onUpload={uploadMoreImages} label="Add Gallery Images" multiple uploading={upImgs} />
+              )}
+            </div>
+          </div>
 
           {/* Basic Info */}
           <SectionLabel label="Basic Info" />
@@ -2143,45 +2487,39 @@ export default function Products({ currentUser }) {
           />
 
           {/* Specifications */}
-          <SectionLabel label="Specifications" />
           <RichField label="Specifications" value={form.description}
             onChange={e => setForm(f => ({ ...f, description: e.target.value }))} onNotify={add} />
           <AutoTagPreview description={form.description} currentTags={form.tags} />
 
-          {/* Gallery Images — first */}
-          <SectionLabel label="Gallery Images" />
-          {form.images.length > 0 ? (
-            <>
-              <ImageStrip images={form.images} onRemove={i => setForm(f => ({ ...f, images: f.images.filter((_, idx) => idx !== i) }))} />
-              <AddMoreImagesButton label="Add More Images" uploading={upImgs}
-                onChange={e => e.target.files?.length && uploadMoreImages(Array.from(e.target.files))} />
-            </>
-          ) : (
-            <ImageUploader onUpload={uploadMoreImages} label="Upload Gallery Images (multiple) · auto-converted to WebP" multiple uploading={upImgs} />
-          )}
-
-          {/* Spec / Diagram Images — second */}
-          <SectionLabel label="Spec / Diagram Images" />
-          {form.spec_images.length > 0 ? (
-            <>
-              <ImageStrip images={form.spec_images} onRemove={i => setForm(f => ({ ...f, spec_images: f.spec_images.filter((_, idx) => idx !== i) }))} />
-              <AddMoreImagesButton label="Add More Spec Images" uploading={upSpec}
-                onChange={e => e.target.files?.length && uploadSpecImages(Array.from(e.target.files))} />
-            </>
-          ) : (
-            <ImageUploader onUpload={uploadSpecImages} label="Upload Spec Images · auto-converted to WebP" multiple uploading={upSpec} />
-          )}
-
-          {/* Resources (PDFs) */}
-          <SectionLabel label="Resources (PDFs — Brochures, Manuals)" />
-          {form.files.length > 0 && (
-            <div className="file-rows">
-              {form.files.map((f, i) => <FileRow key={i} file={f} index={i} onRemove={removeFile} onRename={renameFile} />)}
+          {/* Spec Diagram Images & Resources (PDFs) */}
+          <div className="responsive-grid-2">
+            {/* Spec / Diagram Images — Left */}
+            <div>
+              <SectionLabel label="Spec / Diagram Images" />
+              {form.spec_images.length > 0 ? (
+                <>
+                  <SmartImageGallery images={form.spec_images} isSingle onRemove={i => removeImageFile("spec_images", i)} />
+                  <AddMoreImagesButton label="Add More Spec Images" uploading={upSpec}
+                    onChange={e => e.target.files?.length && uploadSpecImages(Array.from(e.target.files))} />
+                </>
+              ) : (
+                <ImageUploader onUpload={uploadSpecImages} label="Add Spec Images" multiple uploading={upSpec} />
+              )}
             </div>
-          )}
-          <div style={{ marginTop: form.files.length > 0 ? 12 : 0 }}>
-            <PdfUploader onUploadFile={handleFileUpload} onAddUrl={handleAddPdfUrl} uploading={upFile} />
-            {form.files.length > 0 && <p style={{ fontSize: "0.75rem", color: "var(--text-3)", margin: "8px 0 0" }}>📎 {form.files.length} file(s) attached</p>}
+
+            {/* Resources (PDFs) — Right */}
+            <div>
+              <SectionLabel label="Resources (PDFs)" />
+              {form.files.length > 0 ? (
+                <>
+                  <SmartFileDisplay files={form.files} isSingle onRemove={removeFile} onRename={renameFile} />
+                  <AddMorePdfsButton label="Add More PDFs" uploading={upFile}
+                    onUploadFile={handleFileUpload} onAddUrl={handleAddPdfUrl} />
+                </>
+              ) : (
+                <PdfUploader onUploadFile={handleFileUpload} onAddUrl={handleAddPdfUrl} uploading={upFile} />
+              )}
+            </div>
           </div>
 
           {/* Status & Visibility */}
@@ -2213,10 +2551,6 @@ export default function Products({ currentUser }) {
             </div>
           )}
 
-          <div className="modal-footer">
-            <Btn label="Cancel" variant="ghost" onClick={closeModal} />
-            <Btn loading={saving} label={editing ? "Save Changes" : "Create Product"} icon="fa-check" type="submit" />
-          </div>
             </form>
           </>
         )}
