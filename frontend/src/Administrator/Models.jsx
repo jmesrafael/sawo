@@ -76,9 +76,19 @@ function ProductCard({ product }) {
         alignItems: "center", justifyContent: "center",
       }}>
         {localOrRemote(product, 'thumbnail') ? (
-          <img src={localOrRemote(product, 'thumbnail')} alt={product.name} style={{
-            width: "100%", height: "100%", objectFit: "cover",
-          }} />
+          <img
+            src={localOrRemote(product, 'thumbnail')}
+            alt={product.name}
+            width="300"
+            height="300"
+            loading="lazy"
+            decoding="async"
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+            }}
+          />
         ) : (
           <i className="fa-solid fa-image" style={{ fontSize: "1.5rem", color: "var(--text-3)" }} />
         )}

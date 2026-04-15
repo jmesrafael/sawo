@@ -39,7 +39,13 @@
     ],
     "rules": {
       "unicode-bom": "off",
-      "no-unused-vars": "off"
+      "no-unused-vars": [
+        "warn",
+        {
+          "argsIgnorePattern": "^_|^props$|^rest$",
+          "varsIgnorePattern": "^_"
+        }
+      ]
     }
   },
   "browserslist": {

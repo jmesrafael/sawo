@@ -4,14 +4,22 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { getSession, clearSession } from "./supabase";
 import logo from "./SAWO-logo.png";
 import ViewerDisplay from "./ViewerDisplay";
+import EditorDisplay from "./EditorDisplay";
 
-// ── Full nav (admin / superadmin / editor)
-const NAV = [
+// ── Full nav (admin / superadmin)
+const NAV_ADMIN = [
   { to: "/admin/products", label: "Products", icon: "fa-solid fa-box" },
   { to: "/admin/models",   label: "Models",   icon: "fa-solid fa-folder-open" },
   { to: "/admin/taxonomy", label: "Taxonomy", icon: "fa-solid fa-tags" },
   { to: "/admin/logs",     label: "Logs",     icon: "fa-solid fa-file-alt" },
   { to: "/admin/users",    label: "Users",    icon: "fa-solid fa-users" },
+];
+
+// ── Editor nav (limited access)
+const NAV_EDITOR = [
+  { to: "/admin/editor/products", label: "Products", icon: "fa-solid fa-box" },
+  { to: "/admin/models",   label: "Models",   icon: "fa-solid fa-folder-open" },
+  { to: "/admin/taxonomy", label: "Taxonomy", icon: "fa-solid fa-tags" },
 ];
 
 // ── Shared icon-button style (sidebar footer)
@@ -142,6 +150,7 @@ export default function AdminLayout({ children }) {
   if (!session) return null;
 
   const isViewer = session.user.role === "viewer";
+  const isEditor = session.user.role === "editor";
 
   // ── VIEWER LAYOUT ─────────────────────────────────────────────────────────
   // Viewers only see the product catalog — no access to admin pages.
@@ -225,14 +234,39 @@ export default function AdminLayout({ children }) {
     );
   }
 
-  // ── ADMIN / EDITOR / SUPERADMIN LAYOUT ───────────────────────────────────
+  // ── EDITOR LAYOUT ─────────────────────────────────────────────────────────
+  // Editors see a limited interface with Products/Models/Taxonomy only
+  if (isEditor) {
+    return (
+      <div style={{ display: "flex", height: "100vh", overflow: "hidden", fontFamily: "'Montserrat', sans-serif" }}>
+        <Sidebar
+          session={session}
+          dark={dark}
+          setDark={setDark}
+          nav={NAV_EDITOR}
+          handleLogout={handleLogout}
+          location={location}
+        />
+
+        <main style={{ flex: 1, overflowY: "auto", padding: "2rem 2.5rem", background: dark ? "#161412" : "#f7f5f2", transition: "background 0.2s" }}>
+          {location.pathname.startsWith("/admin/editor/products") ? (
+            <EditorDisplay currentUser={session.user} />
+          ) : (
+            React.cloneElement(children, { currentUser: session.user })
+          )}
+        </main>
+      </div>
+    );
+  }
+
+  // ── ADMIN / SUPERADMIN LAYOUT ───────────────────────────────────────────────
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden", fontFamily: "'Montserrat', sans-serif" }}>
       <Sidebar
         session={session}
         dark={dark}
         setDark={setDark}
-        nav={NAV}
+        nav={NAV_ADMIN}
         handleLogout={handleLogout}
         location={location}
       />

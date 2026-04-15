@@ -120,6 +120,10 @@ export default function App() {
             <ProtectedRoute><AdminLayout><Models /></AdminLayout></ProtectedRoute>
           } />
 
+          <Route path="/admin/editor/products" element={
+            <ProtectedRoute><AdminLayout /></ProtectedRoute>
+          } />
+
           {/* Redirect root /admin â†’ login */}
           <Route path="/admin" element={<Navigate to="/login" replace />} />
 

@@ -65,7 +65,15 @@ function TermProductsModal({ open, onClose, term, field }) {
           {products.map(p => (
             <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", background: "var(--surface-2)", borderRadius: "var(--r-sm)", border: "1px solid var(--border)" }}>
               {localOrRemote(p, 'thumbnail')
-                ? <img src={localOrRemote(p, 'thumbnail')} alt="" style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", border: "1px solid var(--border)", flexShrink: 0 }} />
+                ? <img
+                    src={localOrRemote(p, 'thumbnail')}
+                    alt={p.name}
+                    width="40"
+                    height="40"
+                    loading="lazy"
+                    decoding="async"
+                    style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", border: "1px solid var(--border)", flexShrink: 0 }}
+                  />
                 : <div style={{ width: 40, height: 40, borderRadius: 6, background: "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><i className="fa-regular fa-image" style={{ color: "var(--text-3)" }} /></div>
               }
               <span style={{ fontFamily: "var(--font)", fontWeight: 600, fontSize: 14, color: "rgb(20,22,23)" }}>{p.name}</span>

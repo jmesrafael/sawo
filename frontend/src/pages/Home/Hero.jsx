@@ -71,18 +71,35 @@ const Hero = () => {
 
   return (
     <section className="sauna-unique relative w-full min-h-[95vh] flex flex-col justify-center px-5 md:px-10 overflow-hidden">
-      <div className="absolute inset-0 -z-10" style={{ backgroundColor: "#3a3a3a" }}>
+      <div
+        className="absolute inset-0 -z-10"
+        style={{ backgroundColor: "#3a3a3a" }}
+      >
         <picture>
-          <source media="(max-width: 640px)" srcSet="/640.webp" type="image/webp" />
-          <source media="(max-width: 1024px)" srcSet="/1024.webp" type="image/webp" />
-          <source srcSet="/1920.webp" type="image/webp" />
+          <source
+            media="(max-width: 640px)"
+            srcSet="/640.webp 1x"
+            type="image/webp"
+          />
+          <source
+            media="(max-width: 1024px)"
+            srcSet="/1024.webp 1x"
+            type="image/webp"
+          />
+          <source
+            srcSet="/1920.webp 1x"
+            type="image/webp"
+          />
           <img
             src="/1920.webp"
-            alt="SAWO hero"
+            alt="SAWO sauna heaters - Experience wellness and rejuvenation"
+            width="1920"
+            height="1080"
             className="w-full h-full object-cover"
             fetchPriority="high"
             decoding="async"
             loading="eager"
+            style={{ display: "block" }}
           />
         </picture>
       </div>
