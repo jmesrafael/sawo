@@ -105,23 +105,24 @@ export default function App() {
           <Route path="/admin/reset-password" element={<ResetPassword />} />
 
           <Route path="/admin/users" element={
-            <ProtectedRoute><AdminLayout><Users /></AdminLayout></ProtectedRoute>
+            <ProtectedRoute requiredCap="page.users"><AdminLayout><Users /></AdminLayout></ProtectedRoute>
           } />
           <Route path="/admin/products" element={
             <ProtectedRoute><AdminLayout><Products /></AdminLayout></ProtectedRoute>
           } />
           <Route path="/admin/taxonomy" element={
-            <ProtectedRoute><AdminLayout><Taxonomy /></AdminLayout></ProtectedRoute>
+            <ProtectedRoute requiredCap="page.taxonomy"><AdminLayout><Taxonomy /></AdminLayout></ProtectedRoute>
           } />
           <Route path="/admin/logs" element={
-            <ProtectedRoute><AdminLayout><Logs /></AdminLayout></ProtectedRoute>
+            <ProtectedRoute requiredCap="page.logs"><AdminLayout><Logs /></AdminLayout></ProtectedRoute>
           } />
           <Route path="/admin/models" element={
-            <ProtectedRoute><AdminLayout><Models /></AdminLayout></ProtectedRoute>
+            <ProtectedRoute requiredCap="page.models"><AdminLayout><Models /></AdminLayout></ProtectedRoute>
           } />
 
+          {/* Legacy editor products route — redirect to unified products page */}
           <Route path="/admin/editor/products" element={
-            <ProtectedRoute><AdminLayout /></ProtectedRoute>
+            <Navigate to="/admin/products" replace />
           } />
 
           {/* Redirect root /admin â†’ login */}

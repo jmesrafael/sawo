@@ -1,6 +1,7 @@
 // src/Administrator/Products.jsx
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { supabase, cleanOrphanedStorageFiles, logActivity } from "./supabase";
+import { getPerms } from "./permissions";
 import { processPastedTableHTML } from "../utils/cleanTableHTML";
 import { getAllProductsLive, getAllCategoriesLive, getAllTagsLive, getProductByIdLive, bustProductCache } from "../local-storage/supabaseReader";
 
@@ -1518,7 +1519,7 @@ function ProductAuditStrip({ product }) {
 }
 
 // ─── Grid Card ────────────────────────────────────────────────────────────────
-function ProductCard({ p, onEdit, onDelete, onDuplicate }) {
+function ProductCard({ p, onEdit, onDelete, onDuplicate, perms }) {
   const [hovered,  setHovered]  = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef();
@@ -1532,8 +1533,18 @@ function ProductCard({ p, onEdit, onDelete, onDuplicate }) {
 
   const productUrl = `${FRONT_URL || window.location.origin}/products/${p.slug}`;
 
+  const handleCardClick = (e) => {
+    // Don't navigate if clicking the menu button
+    if (menuRef.current && menuRef.current.contains(e.currentTarget)) {
+      return;
+    }
+    window.open(productUrl, "_blank");
+  };
+
   return (
-    <div className="product-grid-card"
+    <a href={productUrl} target="_blank" rel="noopener noreferrer"
+      className="product-grid-card"
+      style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column" }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false); setMenuOpen(false); }}>
       <div className="product-grid-thumb">
@@ -1541,33 +1552,38 @@ function ProductCard({ p, onEdit, onDelete, onDuplicate }) {
           ? <img src={localOrRemote(p, 'thumbnail')} alt={p.name} />
           : <i className="fa-regular fa-image" style={{ fontSize: "1.5rem", color: "var(--border)" }} />
         }
-        {hovered && (
-          <div className="product-grid-options" ref={menuRef}>
+        {hovered && (perms.can("products.edit") || perms.can("products.duplicate") || perms.can("products.delete")) && (
+          <div className="product-grid-options" ref={menuRef} onClick={e => e.preventDefault()}>
             <button type="button" className="product-grid-opts-btn"
-              onClick={e => { e.stopPropagation(); setMenuOpen(m => !m); }}>
+              onClick={e => { e.preventDefault(); e.stopPropagation(); setMenuOpen(m => !m); }}>
               <i className="fa-solid fa-ellipsis-vertical" />
             </button>
             {menuOpen && (
               <div className="product-grid-menu">
-                <button type="button" onClick={() => { setMenuOpen(false); onEdit(p); }}>
-                  <i className="fa-solid fa-pen" /> Edit
-                </button>
-                <button type="button" onClick={() => { setMenuOpen(false); onDuplicate(p); }}>
-                  <i className="fa-solid fa-copy" /> Duplicate
-                </button>
-                <button type="button" className="danger" onClick={() => { setMenuOpen(false); onDelete(p); }}>
-                  <i className="fa-solid fa-trash" /> Delete
-                </button>
+                {perms.can("products.edit") && (
+                  <button type="button" onClick={(e) => { e.preventDefault(); setMenuOpen(false); onEdit(p); }}>
+                    <i className="fa-solid fa-pen" /> Edit
+                  </button>
+                )}
+                {perms.can("products.duplicate") && (
+                  <button type="button" onClick={(e) => { e.preventDefault(); setMenuOpen(false); onDuplicate(p); }}>
+                    <i className="fa-solid fa-copy" /> Duplicate
+                  </button>
+                )}
+                {perms.can("products.delete") && (
+                  <button type="button" className="danger" onClick={(e) => { e.preventDefault(); setMenuOpen(false); onDelete(p); }}>
+                    <i className="fa-solid fa-trash" /> Delete
+                  </button>
+                )}
               </div>
             )}
           </div>
         )}
       </div>
       <div className="product-grid-info">
-        <a href={productUrl} target="_blank" rel="noopener noreferrer"
-          className="product-grid-name product-name-link" style={{ textDecoration: "none", color: "inherit" }}>
+        <div className="product-grid-name product-name-link" style={{ textDecoration: "none", color: "inherit" }}>
           {p.name}
-        </a>
+        </div>
         {(p.categories || []).length > 0 && (
           <div className="product-grid-pills">
             {(p.categories || []).slice(0, 2).map(c => <span key={c} className="tbl-pill tbl-pill-cat">{c}</span>)}
@@ -1580,12 +1596,13 @@ function ProductCard({ p, onEdit, onDelete, onDuplicate }) {
           </div>
         )}
       </div>
-    </div>
+    </a>
   );
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Products({ currentUser }) {
+  const perms = getPerms(currentUser);
   const { toasts, add, remove } = useToast();
 
   const [products, setProducts]   = useState([]);
@@ -1661,6 +1678,11 @@ export default function Products({ currentUser }) {
   }, []);
 
   useEffect(() => { fetchProducts(); fetchMeta(); }, [fetchProducts, fetchMeta]);
+
+  // ── Set default view for read-only users ────────────────────────────────────
+  useEffect(() => {
+    if (!perms.can("products.edit")) setViewMode("grid");
+  }, []); // eslint-disable-line
 
   // ── Fetch revision history (logs) ───────────────────────────────────────────
   const fetchRevisions = async (productId) => {
@@ -2098,23 +2120,27 @@ export default function Products({ currentUser }) {
             </button>
           ))}
         </div>
-        {selected.size > 0 && (
+        {perms.can("products.bulk_delete") && selected.size > 0 && (
           <button type="button" className="btn btn-sm"
             style={{ background: "var(--danger-bg)", color: "var(--danger)", border: "1px solid var(--danger)", gap: 5 }}
             onClick={() => setBulkConfirm(true)}>
             <i className="fa-solid fa-trash" /> Delete {selected.size}
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => setCleanupOpen(true)}
-          title="Storage Cleanup — Remove orphaned files. Scans both image and PDF storage buckets to find and delete files that aren't attached to any product. Safe to run anytime."
-          className="icon-btn"
-          style={{ marginLeft: 4 }}
-        >
-          <i className="fa-solid fa-broom" style={{ fontSize: "0.85em" }} />
-        </button>
-        <Btn icon="fa-plus" label="New Product" onClick={openCreate} style={{ marginLeft: "auto" }} />
+        {perms.can("products.storage_cleanup") && (
+          <button
+            type="button"
+            onClick={() => setCleanupOpen(true)}
+            title="Storage Cleanup — Remove orphaned files. Scans both image and PDF storage buckets to find and delete files that aren't attached to any product. Safe to run anytime."
+            className="icon-btn"
+            style={{ marginLeft: 4 }}
+          >
+            <i className="fa-solid fa-broom" style={{ fontSize: "0.85em" }} />
+          </button>
+        )}
+        {perms.can("products.create") && (
+          <Btn icon="fa-plus" label="New Product" onClick={openCreate} style={{ marginLeft: "auto" }} />
+        )}
       </div>
 
       {/* Grid View */}
@@ -2125,7 +2151,7 @@ export default function Products({ currentUser }) {
               {search ? `No products match "${search}"` : "No products yet — click New Product to create one."}
             </div>
           )}
-          {filtered.map(p => <ProductCard key={p.id} p={p} onEdit={openEdit} onDuplicate={openDuplicate} onDelete={setConfirmDel} />)}
+          {filtered.map(p => <ProductCard key={p.id} p={p} onEdit={openEdit} onDuplicate={openDuplicate} onDelete={setConfirmDel} perms={perms} />)}
         </div>
       )}
 
@@ -2140,11 +2166,13 @@ export default function Products({ currentUser }) {
             <table className="products-table">
               <thead>
                 <tr>
-                  <th style={{ width: 36, paddingRight: 0 }}>
-                    <input type="checkbox" className="tbl-checkbox"
-                      checked={filtered.length > 0 && selected.size === filtered.length}
-                      onChange={toggleSelectAll} />
-                  </th>
+                  {perms.can("products.bulk_delete") && (
+                    <th style={{ width: 36, paddingRight: 0 }}>
+                      <input type="checkbox" className="tbl-checkbox"
+                        checked={filtered.length > 0 && selected.size === filtered.length}
+                        onChange={toggleSelectAll} />
+                    </th>
+                  )}
                   <th style={{ width: 44 }}></th>
                   <th>Product</th>
                   <th>Categories</th>
@@ -2157,15 +2185,17 @@ export default function Products({ currentUser }) {
               </thead>
               <tbody>
                 {filtered.length === 0 && (
-                  <tr><td colSpan={8} className="table-empty">
+                  <tr><td colSpan={perms.can("products.bulk_delete") ? 9 : 8} className="table-empty">
                     {search ? `No products match "${search}"` : "No products yet — click New Product to create one."}
                   </td></tr>
                 )}
                 {filtered.map(p => (
                   <tr key={p.id} className={selected.has(p.id) ? "row-selected" : ""}>
-                    <td style={{ paddingRight: 0 }}>
-                      <input type="checkbox" className="tbl-checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
-                    </td>
+                    {perms.can("products.bulk_delete") && (
+                      <td style={{ paddingRight: 0 }}>
+                        <input type="checkbox" className="tbl-checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
+                      </td>
+                    )}
                     <td style={{ width: 44 }}>
                       {localOrRemote(p, 'thumbnail')
                         ? <img src={localOrRemote(p, 'thumbnail')} alt="" className="product-thumb" />
@@ -2206,9 +2236,15 @@ export default function Products({ currentUser }) {
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <div className="table-actions">
-                        <IconBtn icon="fa-pen"   title="Edit"   onClick={() => openEdit(p)} />
-                        <IconBtn icon="fa-copy" title="Duplicate" onClick={() => openDuplicate(p)} />
-                        <IconBtn icon="fa-trash" title="Delete" onClick={() => setConfirmDel(p)} danger />
+                        {perms.can("products.edit") && (
+                          <IconBtn icon="fa-pen" title="Edit" onClick={() => openEdit(p)} />
+                        )}
+                        {perms.can("products.duplicate") && (
+                          <IconBtn icon="fa-copy" title="Duplicate" onClick={() => openDuplicate(p)} />
+                        )}
+                        {perms.can("products.delete") && (
+                          <IconBtn icon="fa-trash" title="Delete" onClick={() => setConfirmDel(p)} danger />
+                        )}
                       </div>
                     </td>
                   </tr>
