@@ -211,12 +211,17 @@ const Stone = () => {
       `}</style>
 
       {/* HERO */}
-      <section
-        className="wm-hero min-h-[95vh] flex flex-col justify-center items-center text-center px-6 relative"
-        style={{ backgroundImage: `url(${heroImg})`, backgroundSize: "cover", backgroundPosition: "center" }}
-      >
-        <div className="wm-hero-overlay" />
-        <div className="wm-hero-content">
+      <section className="relative min-h-[95vh] flex flex-col justify-center items-center text-center px-6">
+        <img
+          src={heroImg}
+          alt="Sauna Stone Series"
+          className="absolute inset-0 w-full h-full object-cover object-center -z-10"
+          loading="eager"
+          fetchPriority="high"
+          decoding="sync"
+        />
+        <div className="absolute inset-0 bg-black/40 -z-10" />
+        <div className="relative z-10">
           <h1 className="wm-hero-title">SAUNA STONE SERIES</h1>
           <p className="wm-hero-subtitle">Efficient, Sleek, Wellness-Focused Saunas.</p>
           <div style={{ marginTop: "32px" }}>

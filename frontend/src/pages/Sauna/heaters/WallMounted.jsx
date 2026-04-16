@@ -218,17 +218,6 @@ export default function WallMounted() {
     [activeGroup, groupNames]
   );
 
-  // ── Client-side search filter ────────────────────────────────────────────
-  const displayed = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return allProducts;
-    return allProducts.filter(p =>
-      p.name?.toLowerCase().includes(q) ||
-      p.short_description?.toLowerCase().includes(q) ||
-      (p.categories || []).some(c => c.toLowerCase().includes(q)) ||
-      (p.tags || []).some(t => t.toLowerCase().includes(q))
-    );
-  }, [allProducts, search]);
 
   return (
     <div className="relative">
@@ -295,12 +284,17 @@ export default function WallMounted() {
       `}</style>
 
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
-      <section
-        className="wm-hero min-h-[95vh] flex flex-col justify-center items-center text-center px-6 relative"
-        style={{ backgroundImage: `url(${heroImg})`, backgroundSize: "cover", backgroundPosition: "center" }}
-      >
-        <div className="wm-hero-overlay" />
-        <div className="wm-hero-content">
+      <section className="relative min-h-[95vh] flex flex-col justify-center items-center text-center px-6">
+        <img
+          src={heroImg}
+          alt="Wall-Mounted Sauna Heaters"
+          className="absolute inset-0 w-full h-full object-cover object-center -z-10"
+          loading="eager"
+          fetchPriority="high"
+          decoding="sync"
+        />
+        <div className="absolute inset-0 bg-black/40 -z-10" />
+        <div className="relative z-10">
           <h1 className="wm-hero-title">WALL-MOUNTED SAUNA HEATERS</h1>
           <p className="wm-hero-subtitle">Space-saving sleek modern designs</p>
           <div style={{ marginTop: "32px" }}>
