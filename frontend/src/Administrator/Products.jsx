@@ -38,12 +38,40 @@ const EMPTY_FORM = {
 
 // ─── Auto-extract tags from description HTML ──────────────────────────────────
 function extractTagsFromDescription(html) {
-  if (!html || !html.includes("<table")) return { kwTags: [], modelTags: [] };
+  if (!html) return { kwTags: [], modelTags: [] };
   try {
     const doc = new DOMParser().parseFromString(html, "text/html");
-    const tables = doc.querySelectorAll("table");
     const kwTags    = new Set();
     const modelTags = new Set();
+
+    // Extract text content for power range patterns
+    const textContent = doc.body.textContent;
+
+    // Pattern 1: Extract power ranges like "4.5 – 9.0kW" or "4.5-9.0 kW"
+    const powerRangePattern = /(\d+(?:[.,]\d+)?)\s*(?:–|-|to)\s*(\d+(?:[.,]\d+)?)\s*k[wW]/gi;
+    let match;
+    while ((match = powerRangePattern.exec(textContent)) !== null) {
+      const min = parseFloat(match[1].replace(",", "."));
+      const max = parseFloat(match[2].replace(",", "."));
+      if (!isNaN(min) && !isNaN(max) && min > 0 && max < 1000) {
+        kwTags.add(`${min.toFixed(1)} – ${max.toFixed(1)} kW`);
+      }
+    }
+
+    // Pattern 2: Extract single kW values like "9.0 kW"
+    const singleKwPattern = /(\d+(?:[.,]\d+)?)\s*k[wW]\b/gi;
+    while ((match = singleKwPattern.exec(textContent)) !== null) {
+      const val = parseFloat(match[1].replace(",", "."));
+      if (!isNaN(val) && val > 0 && val < 1000) {
+        const formatted = `${val.toFixed(1)} kW`;
+        if (![...kwTags].some(t => t.includes(formatted))) {
+          kwTags.add(formatted);
+        }
+      }
+    }
+
+    // Extract from tables (existing logic)
+    const tables = doc.querySelectorAll("table");
     for (const table of tables) {
       const rows = Array.from(table.querySelectorAll("tr"));
       if (rows.length < 2) continue;
@@ -498,15 +526,17 @@ function RichField({ label, value, onChange, rows = 6, onNotify }) {
 
 // ─── Auto-tag preview banner ───────────────────────────────────────────────────
 // ─── Smart Tag Suggestions from Name & Description ──────────────────────
-function TagSuggestions({ name, description, currentTags, allTags, onAddTags }) {
-  // Find tags that appear in name or description
+function TagSuggestions({ name, description, features = [], currentTags, allTags, onAddTags }) {
+  // Find tags that appear in name, description, or features
   const suggestedTags = allTags.filter(tag => {
     if (currentTags.includes(tag)) return false; // Already added
     const nameLower = (name || "").toLowerCase();
     const descLower = (description || "").toLowerCase();
-    // Check if tag appears as a word in name or description
+    const featuresText = (features || []).join(" ").toLowerCase();
+    // Check if tag appears as a word in name, description, or features
     return new RegExp(`\\b${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(nameLower) ||
-           new RegExp(`\\b${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(descLower);
+           new RegExp(`\\b${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(descLower) ||
+           new RegExp(`\\b${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(featuresText);
   });
 
   if (!suggestedTags.length) return null;
@@ -2514,6 +2544,7 @@ export default function Products({ currentUser }) {
           <TagSuggestions
             name={form.name}
             description={form.short_description}
+            features={form.features}
             currentTags={form.tags}
             allTags={allTags}
             onAddTags={suggestedTags => {
