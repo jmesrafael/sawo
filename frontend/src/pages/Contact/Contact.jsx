@@ -1,7 +1,6 @@
-// Contact.jsx
-
 import React, { useState } from "react";
-import ButtonClear from "../../components/Buttons/ButtonClear";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faChevronRight, faMapMarkerAlt, faPhone, faEnvelope, faGlobe } from "@fortawesome/free-solid-svg-icons";
 
 const Contact = () => {
   const [formData, setFormData] = useState({
@@ -19,7 +18,6 @@ const Contact = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // For now, just log. In production, send to backend
     console.log("Form submitted:", formData);
     alert("Thank you for reaching out! We'll get back to you soon.");
     setFormData({ name: "", email: "", phone: "", subject: "", message: "" });
@@ -28,135 +26,393 @@ const Contact = () => {
   return (
     <div className="relative">
       <style>{`
-        .ct-hero {
-          min-height: 95vh;
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700;800&display=swap');
+
+        /* ── MAIN SECTION ── */
+        .ct-section {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 60px 20px;
+        }
+        .ct-section:first-of-type {
+          padding-top: 130px;
+        }
+        .ct-section--dark {
+        }
+        .ct-intro {
+          text-align: center;
+          margin-bottom: 60px;
+        }
+        .ct-intro-title {
+          font-family: 'Montserrat', sans-serif;
+          font-size: 2.8rem;
+          font-weight: 700;
+          color: #2c1f13;
+          margin-bottom: 16px;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+        }
+        .ct-intro-subtitle {
+          font-family: 'Montserrat', sans-serif;
+          font-size: 1rem;
+          color: #666;
+          line-height: 1.7;
+          max-width: 600px;
+          margin: 0 auto;
+        }
+
+        /* ── CONTACT GRID ── */
+        .ct-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 60px;
+          align-items: start;
+        }
+
+        /* ── SECTION TITLE ── */
+        .ct-section-title {
+          font-family: 'Montserrat', sans-serif;
+          font-size: 2.2rem;
+          font-weight: 700;
+          color: #2c1f13;
+          margin-bottom: 40px;
+          line-height: 1.3;
+        }
+
+        /* ── CONTACT CARDS ── */
+        .ct-contact-card {
+          padding: 28px;
+          background: #fff;
+          border-radius: 8px;
+          margin-bottom: 24px;
+          border: 1px solid #e0d5c7;
+          transition: all 0.3s ease;
+        }
+        .ct-contact-card:hover {
+          border-color: #a67853;
+          box-shadow: 0 8px 24px rgba(139, 94, 60, 0.1);
+          transform: translateY(-2px);
+        }
+        .ct-contact-card-icon {
+          font-size: 1.4rem;
+          color: #a67853;
+          margin-right: 12px;
+          margin-bottom: 12px;
+          display: inline-block;
+        }
+        .ct-contact-card h3 {
+          font-family: 'Montserrat', sans-serif;
+          font-size: 1.1rem;
+          font-weight: 700;
+          color: #2c1f13;
+          margin-bottom: 12px;
+          display: flex;
+          align-items: center;
+        }
+        .ct-contact-card p {
+          font-family: 'Montserrat', sans-serif;
+          font-size: 0.9rem;
+          color: #666;
+          margin-bottom: 8px;
+          line-height: 1.6;
+        }
+        .ct-contact-card a {
+          font-family: 'Montserrat', sans-serif;
+          color: #a67853;
+          text-decoration: none;
+          font-weight: 600;
+          font-size: 0.9rem;
+          transition: color 0.3s;
+          display: inline-block;
+        }
+        .ct-contact-card a:hover {
+          color: #8b5e3c;
+        }
+        /* ── SOCIAL MEDIA SECTION ── */
+        .ct-social-section {
+          margin-top: 32px;
+          padding-top: 24px;
+          border-top: 1px solid #e0d5c7;
+        }
+        .ct-social-title {
+          font-family: 'Montserrat', sans-serif;
+          font-size: 0.85rem;
+          font-weight: 600;
+          color: #a67853;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 16px;
+        }
+        .ct-social-links {
+          display: flex;
+          gap: 16px;
+          flex-wrap: wrap;
+        }
+        .ct-social-link {
+          width: 40px;
+          height: 40px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: #a67853;
+          text-decoration: none;
+          transition: all 0.3s ease;
+          border-radius: 4px;
+        }
+        .ct-social-link:hover {
+          color: #fff;
+          background: #a67853;
+          transform: translateY(-2px);
+        }
+        .ct-social-link i {
+          font-size: 1.1rem;
+        }
+
+        /* ── CONTACT FORM ── */
+        .ct-form {
+          padding: 40px;
+          background: #fff;
+          border-radius: 8px;
+          border: 1px solid #e0d5c7;
+        }
+        .ct-form-title {
+          font-family: 'Montserrat', sans-serif;
+          font-size: 1.4rem;
+          font-weight: 700;
+          color: #2c1f13;
+          margin-bottom: 28px;
+        }
+        .ct-form-group {
+          margin-bottom: 24px;
+        }
+        .ct-form-label {
+          display: block;
+          font-family: 'Montserrat', sans-serif;
+          font-size: 0.85rem;
+          font-weight: 600;
+          color: #2c1f13;
+          margin-bottom: 8px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        .ct-form-input,
+        .ct-form-textarea {
+          width: 100%;
+          padding: 12px 14px;
+          border: 1.5px solid #e0d5c7;
+          border-radius: 4px;
+          font-family: 'Montserrat', sans-serif;
+          font-size: 0.9rem;
+          color: #2c1f13;
+          transition: all 0.3s ease;
+          background: #fafaf9;
+        }
+        .ct-form-input::placeholder,
+        .ct-form-textarea::placeholder {
+          color: #c4a882;
+        }
+        .ct-form-input:focus,
+        .ct-form-textarea:focus {
+          outline: none;
+          border-color: #a67853;
+          background: #fff;
+          box-shadow: 0 0 0 3px rgba(166, 120, 83, 0.1);
+        }
+        .ct-form-textarea {
+          resize: vertical;
+          min-height: 140px;
+        }
+        .ct-form-submit {
+          width: 100%;
+          padding: 14px;
+          background-color: #a67853;
+          color: #fff;
+          border: none;
+          border-radius: 4px;
+          font-family: 'Montserrat', sans-serif;
+          font-size: 0.9rem;
+          font-weight: 700;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+          cursor: pointer;
+          transition: all 0.3s ease;
           display: flex;
           align-items: center;
           justify-content: center;
+          gap: 8px;
+        }
+        .ct-form-submit:hover {
+          background-color: #8b5e3c;
+          transform: translateY(-2px);
+          box-shadow: 0 8px 20px rgba(139, 94, 60, 0.25);
+        }
+
+        /* ── CTA BANNER ── */
+        .ct-cta-section {
           text-align: center;
-          padding: 48px 24px;
-          background: linear-gradient(135deg, #2c1f13 0%, #5c3d2a 50%, #2c1f13 100%);
-          color: white;
+          padding: 80px 20px;
+          max-width: 1200px;
+          margin: 0 auto;
         }
-        .ct-hero h1 { font-size: 48px; font-weight: 700; margin-bottom: 16px; font-family: 'Montserrat', sans-serif; }
-        .ct-hero p { font-size: 18px; opacity: 0.9; margin-bottom: 32px; }
-        .ct-section { padding: 64px 24px; max-width: 1200px; margin: 0 auto; }
-        .ct-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin: 48px 0; }
-        .ct-contact-card { padding: 32px; background: #f9f7f5; border-radius: 8px; }
-        .ct-contact-card h3 { font-size: 20px; font-weight: 600; color: #2c1f13; margin-bottom: 12px; }
-        .ct-contact-card p { color: #666; margin-bottom: 8px; }
-        .ct-contact-card a { color: #a67853; text-decoration: none; font-weight: 600; }
-        .ct-contact-card a:hover { text-decoration: underline; }
-        .ct-form { padding: 32px; background: white; border: 1px solid #e0d5c7; border-radius: 8px; }
-        .ct-form h3 { font-size: 20px; font-weight: 600; color: #2c1f13; margin-bottom: 24px; }
-        .ct-form-group { margin-bottom: 20px; }
-        .ct-form label { display: block; font-size: 14px; font-weight: 600; color: #2c1f13; margin-bottom: 8px; }
-        .ct-form input, .ct-form textarea {
-          width: 100%;
-          padding: 12px;
-          border: 1px solid #e0d5c7;
-          border-radius: 4px;
+        .ct-cta-title {
           font-family: 'Montserrat', sans-serif;
-          font-size: 14px;
-          transition: border-color 0.3s;
+          font-size: 2rem;
+          font-weight: 700;
+          color: #2c1f13;
+          margin-bottom: 16px;
+          line-height: 1.3;
         }
-        .ct-form input:focus, .ct-form textarea:focus { outline: none; border-color: #a67853; }
-        .ct-form textarea { resize: vertical; min-height: 120px; }
-        .ct-submit {
-          width: 100%;
-          padding: 12px;
-          background: #a67853;
-          color: white;
+        .ct-cta-desc {
+          font-family: 'Montserrat', sans-serif;
+          font-size: 1rem;
+          color: #666;
+          margin-bottom: 32px;
+          max-width: 600px;
+          margin-left: auto;
+          margin-right: auto;
+          line-height: 1.7;
+        }
+        .ct-cta-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          font-family: 'Montserrat', sans-serif;
+          font-size: 0.85rem;
+          font-weight: 700;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+          padding: 12px 28px;
+          background-color: #a67853;
+          color: #fff;
           border: none;
           border-radius: 4px;
-          font-size: 16px;
-          font-weight: 600;
           cursor: pointer;
-          transition: background 0.3s;
+          text-decoration: none;
+          transition: all 0.3s ease;
         }
-        .ct-submit:hover { background: #8b5e3c; }
+        .ct-cta-btn:hover {
+          background-color: transparent;
+          color: #a67853;
+          border: 2px solid #a67853;
+        }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 1024px) {
+          .ct-grid {
+            grid-template-columns: 1fr;
+            gap: 40px;
+          }
+          .ct-hero-title {
+            font-size: 2.5rem;
+          }
+        }
         @media (max-width: 768px) {
-          .ct-grid { grid-template-columns: 1fr; gap: 32px; }
-          .ct-hero h1 { font-size: 32px; }
+          .ct-hero-title {
+            font-size: 2rem;
+          }
+          .ct-hero-subtitle {
+            font-size: 1rem;
+          }
+          .ct-section-title {
+            font-size: 1.6rem;
+          }
+          .ct-form {
+            padding: 28px;
+          }
+          .ct-cta-title {
+            font-size: 1.5rem;
+          }
         }
       `}</style>
 
-      {/* HERO */}
-      <section className="ct-hero">
-        <div>
-          <h1>GET IN TOUCH</h1>
-          <p>We'd love to hear from you. Reach out with any questions or inquiries.</p>
+      {/* ── CONTACT INFO + FORM ─────────────────────────────────────────── */}
+      <section className="ct-section ct-section--dark">
+        <div className="ct-intro">
+          <h1 className="ct-intro-title">Get In Touch</h1>
+          <p className="ct-intro-subtitle">We'd love to hear from you. Reach out with any questions or inquiries about our sauna solutions.</p>
         </div>
-      </section>
-
-      {/* CONTACT INFO + FORM */}
-      <section className="ct-section" style={{ backgroundColor: "#f9f7f5" }}>
         <div className="ct-grid">
           {/* Left: Contact Info */}
           <div>
-            <h2 style={{ fontSize: "28px", fontWeight: "700", color: "#2c1f13", marginBottom: "32px" }}>
-              Contact Information
-            </h2>
+            <h2 className="ct-section-title">Contact Information</h2>
 
             <div className="ct-contact-card">
-              <h3><i className="fas fa-map-marker-alt" style={{ marginRight: "12px", color: "#a67853" }} />Address</h3>
+              <h3>
+                <FontAwesomeIcon icon={faMapMarkerAlt} className="ct-contact-card-icon" />
+                Address
+              </h3>
               <p>SAWO Corporation</p>
-              <p>Finland</p>
-              <a href="https://www.sawo.com" target="_blank" rel="noopener noreferrer">Visit Website</a>
+              <p>Bringing Finnish tradition to the world</p>
+              <a href="https://www.sawo.com" target="_blank" rel="noopener noreferrer">
+                Visit Website <FontAwesomeIcon icon={faChevronRight} style={{ fontSize: "0.7rem", marginLeft: "4px" }} />
+              </a>
             </div>
 
-            <div className="ct-contact-card" style={{ marginTop: "20px" }}>
-              <h3><i className="fas fa-envelope" style={{ marginRight: "12px", color: "#a67853" }} />Email</h3>
+            <div className="ct-contact-card">
+              <h3>
+                <FontAwesomeIcon icon={faEnvelope} className="ct-contact-card-icon" />
+                Email
+              </h3>
               <p>For product inquiries, technical support, and general questions</p>
               <a href="mailto:info@sawo.com">info@sawo.com</a>
             </div>
 
-            <div className="ct-contact-card" style={{ marginTop: "20px" }}>
-              <h3><i className="fas fa-phone" style={{ marginRight: "12px", color: "#a67853" }} />Phone</h3>
+            <div className="ct-contact-card">
+              <h3>
+                <FontAwesomeIcon icon={faPhone} className="ct-contact-card-icon" />
+                Phone
+              </h3>
               <p>Call us during business hours</p>
               <a href="tel:+358123456789">+358 (0) 1 234 56789</a>
             </div>
 
-            <div className="ct-contact-card" style={{ marginTop: "20px" }}>
-              <h3><i className="fas fa-globe" style={{ marginRight: "12px", color: "#a67853" }} />Follow Us</h3>
+            <div className="ct-contact-card">
+              <h3>
+                <FontAwesomeIcon icon={faGlobe} className="ct-contact-card-icon" />
+                Follow Us
+              </h3>
               <p>Connect with SAWO on social media</p>
-              <div style={{ marginTop: "12px" }}>
-                <a href="https://www.sawo.com" target="_blank" rel="noopener noreferrer" style={{ marginRight: "16px" }}>
-                  <i className="fab fa-facebook" style={{ fontSize: "20px" }} />
-                </a>
-                <a href="https://www.sawo.com" target="_blank" rel="noopener noreferrer" style={{ marginRight: "16px" }}>
-                  <i className="fab fa-instagram" style={{ fontSize: "20px" }} />
-                </a>
-                <a href="https://www.sawo.com" target="_blank" rel="noopener noreferrer">
-                  <i className="fab fa-linkedin" style={{ fontSize: "20px" }} />
-                </a>
+              <div className="ct-social-section">
+                <div className="ct-social-links">
+                  <a href="https://www.facebook.com/sawo" target="_blank" rel="noopener noreferrer" className="ct-social-link" title="Facebook">
+                    <i className="fab fa-facebook-f" />
+                  </a>
+                  <a href="https://www.instagram.com/sawo" target="_blank" rel="noopener noreferrer" className="ct-social-link" title="Instagram">
+                    <i className="fab fa-instagram" />
+                  </a>
+                  <a href="https://www.linkedin.com/company/sawo" target="_blank" rel="noopener noreferrer" className="ct-social-link" title="LinkedIn">
+                    <i className="fab fa-linkedin-in" />
+                  </a>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Right: Contact Form */}
           <div className="ct-form">
-            <h3>Send us a Message</h3>
+            <h3 className="ct-form-title">Send us a Message</h3>
             <form onSubmit={handleSubmit}>
               <div className="ct-form-group">
-                <label htmlFor="name">Full Name *</label>
+                <label htmlFor="name" className="ct-form-label">Full Name *</label>
                 <input
                   type="text"
                   id="name"
                   name="name"
+                  className="ct-form-input"
                   value={formData.name}
                   onChange={handleChange}
                   required
-                  placeholder="Your name"
+                  placeholder="Your full name"
                 />
               </div>
 
               <div className="ct-form-group">
-                <label htmlFor="email">Email Address *</label>
+                <label htmlFor="email" className="ct-form-label">Email Address *</label>
                 <input
                   type="email"
                   id="email"
                   name="email"
+                  className="ct-form-input"
                   value={formData.email}
                   onChange={handleChange}
                   required
@@ -165,11 +421,12 @@ const Contact = () => {
               </div>
 
               <div className="ct-form-group">
-                <label htmlFor="phone">Phone Number</label>
+                <label htmlFor="phone" className="ct-form-label">Phone Number</label>
                 <input
                   type="tel"
                   id="phone"
                   name="phone"
+                  className="ct-form-input"
                   value={formData.phone}
                   onChange={handleChange}
                   placeholder="+358 (0) 1 234 56789"
@@ -177,11 +434,12 @@ const Contact = () => {
               </div>
 
               <div className="ct-form-group">
-                <label htmlFor="subject">Subject *</label>
+                <label htmlFor="subject" className="ct-form-label">Subject *</label>
                 <input
                   type="text"
                   id="subject"
                   name="subject"
+                  className="ct-form-input"
                   value={formData.subject}
                   onChange={handleChange}
                   required
@@ -190,19 +448,20 @@ const Contact = () => {
               </div>
 
               <div className="ct-form-group">
-                <label htmlFor="message">Message *</label>
+                <label htmlFor="message" className="ct-form-label">Message *</label>
                 <textarea
                   id="message"
                   name="message"
+                  className="ct-form-textarea"
                   value={formData.message}
                   onChange={handleChange}
                   required
-                  placeholder="Tell us more..."
+                  placeholder="Tell us more about your inquiry..."
                 />
               </div>
 
-              <button type="submit" className="ct-submit">
-                <i className="fas fa-paper-plane" style={{ marginRight: "8px" }} />
+              <button type="submit" className="ct-form-submit">
+                <i className="fas fa-paper-plane" />
                 Send Message
               </button>
             </form>
@@ -210,17 +469,16 @@ const Contact = () => {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="ct-section">
-        <h2 style={{ fontSize: "28px", fontWeight: "700", color: "#2c1f13", textAlign: "center", marginBottom: "24px" }}>
-          Questions About Our Products?
-        </h2>
-        <p style={{ textAlign: "center", fontSize: "16px", color: "#666", marginBottom: "32px" }}>
-          Browse our product catalogues or speak with a specialist to find the perfect sauna solution.
+      {/* ── CTA SECTION ─────────────────────────────────────────────────── */}
+      <section className="ct-cta-section">
+        <h2 className="ct-cta-title">Questions About Our Products?</h2>
+        <p className="ct-cta-desc">
+          Browse our product catalogues or speak with a specialist to find the perfect sauna solution for your needs.
         </p>
-        <div style={{ textAlign: "center" }}>
-          <ButtonClear text="VIEW PRODUCTS" href="https://www.sawo.com/sawo-products/" />
-        </div>
+        <a href="/sauna-products" className="ct-cta-btn">
+          Explore Products
+          <FontAwesomeIcon icon={faChevronRight} />
+        </a>
       </section>
     </div>
   );
